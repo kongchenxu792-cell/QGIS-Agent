@@ -76,7 +76,7 @@ from qgis.gui import (
 
 
 
-from .. import __version__ as _app_version
+from src import __version__ as _app_version
 
 from core.ai_worker import (
     AIProcessingWorker,

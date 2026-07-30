@@ -1,0 +1,44 @@
+2026-06-17 | DIRECTION | 主方向锁定：防灾/应急（Disaster Response / Risk Communication）；水文从主线降级为可选扩展；skills 策略从“覆盖面”改为“场景套件(<=10) + 可复现闭环”
+2026-06-17 | PRIORITY | 灾种优先级：地震（先做震度/烈度影响区态势图 + 避难所覆盖/盲区两条闭环）
+2026-06-17 | OFFLINE | OFFLINE_FIRST：离线 Tier0(无模型也能跑固定指令/模板) + Tier1(本地模型仅做参数解析增强)；两条地震闭环必须在断网下可复现
+2026-06-17 | ARCH | result_contract 统一 schema + adapter 落地；新增 Tier0 闭环A/B模板与 Tier1 拒绝策略（禁本地模型生成 PyQGIS 自由代码），离线地震最小集进入运行验收阶段
+2026-06-17 | QA | P1_TEST 断网/无key：闭环A/B 各 10/10 通过；引入东京公开数据子集；发现无害 PROJ: Cannot find proj.db（exitQgis阶段）
+2026-06-17 | BUGFIX | 启动失败修复：main.py 顶部注入项目根到 sys.path，解决 ModuleNotFoundError: No module named 'src'（因 PYTHONPATH 未含项目根且 sandbox_worker 采用 from src... 绝对导入）
+2026-06-17 | TECH_STACK | QGIS Portable(Desktop) + PyQGIS/Processing + Qt DockWidget UI + Python sandbox(QThread/exec) + AI(Online API + Offline local LLM) + OFFLINE_FIRST(Tier0 templates + Tier1 param-parse only) + fallback(numpy+GDAL) + result_contract(JSON schema+adapter)
+2026-06-18 | DEMO_READY | UI 主通路切到纯 UNIFIED_RESULT(schema)；补齐 demo_poi 数据与 README_DEMO；sys.path 注入 realpath+幂等；exitQgis stderr 抑制（仅观感）
+2026-06-18 | BUGFIX | 演示验收修复：layer_loader 对 `.vrt` 改为 vector-first（OGR VRT）再 raster-fallback（GDAL VRT），解决 demo_poi.vrt 被误判为栅格导致“无法加载图层文件”
+2026-06-18 | BUGFIX | layer_loader 架构修复：删除扩展名白名单，改为 OGR优先→失败回退GDAL；demo_poi.vrt 的 LayerSRS 改为 WGS84，避开 EPSG:4612 对 proj.db 的依赖
+2026-06-18 | GAP | 离线能力缺口确认：instruction_mapper 仅覆盖单图层基础操作，闭环A所需 spatial_join（震度区 -> POI 空间关联）尚未实现；离线模式暂不具备完整地震风险分析能力
+2026-06-18 | QA_FAIL | 闭环A离线验收未通过：spatial_join 虽命中并生成结果层名，但结果属性表与原 demo_poi 完全一致，无新增震度字段，判定为“流程命中但语义失败”
+2026-06-18 | QA_FAIL | 闭环A二次验收仍未通过：JOIN_FIELDS/METHOD 修复后结果仍无新增字段，说明最终根因更可能在 processing 输出结果或 result_contract/layer 引用链
+2026-06-19 | ROOT_CAUSE | 闭环A最终根因锁定为数据 sidecar 缺失：`东京震度分布数据.shp/.shx` 被重命名但 `.dbf/.prj` 未同步，导致 JOIN 层 91938 polygons + 0 fields；补齐同名 `.dbf/.prj` 后 spatial_join 独立复现输出 30 字段，matched=100
+2026-06-19 | ROOT_CAUSE | 闭环A又锁定两层离线特有根因：1) 本地 7B 模型返回 unknown，需 `_keyword_pre_match` 兜底触发 spatial_join；2) LLM 捏造不存在的 `join_fields=['震度级别']`，需先与真实字段求交集，否则回退为关联全部字段
+2026-06-19 | QA_PASS | CEO 终验看到 join 结果层新增 `CODE` 与多组震度指标字段（原 demo_poi 仅 6 字段），闭环A 从“流程命中但语义失败”转为“语义基本通过”
+2026-06-19 | SPEC | 闭环B 规格正式下发：避难所500m缓冲区 + 东京行政区覆盖率统计；输出 coverage_polygon + coverage_rate/covered_area/total_area/shelter_count，A/B 为并列闭环无先后依赖
+2026-06-19 | REVIEW | coverage_analysis 审核结论：流程骨架已通用，但图层角色识别(`source_layer/boundary_layer`)未接入自动识别，且缺 CRS 守护；当前仅能算"半通用模板"
+2026-06-20 | QA_PASS | 闭环B 终验通过：32.9%覆盖率，2429有效要素，GeoJSON图层画布正常显示。经历14轮迭代(crs阻断→大要素卡死→LLM误匹配→clip静默失败→WKB序列化失败→内存图层损坏→GPKG空壳)后，最终方案为Shapely全链路+GeoJSON落地，完全绕过QGIS内部几何管线
+2026-06-20 | DISCOVERY | 平台级发现：EPSG:3857大坐标(~1500万)下QGIS存在三重静默失败——native processing几何运算返回空、内存图层fromWkt→addFeature内部损坏、QgsVectorFileWriter写出空壳。唯一可靠路径：Shapely C++几何库全链路
+2026-06-20 | CONSTITUTION | 项目宪法v1.0签发：六条核心原则(声明式优先/守护线框架化/自动测试强制/单文件800行上限/变更留痕/Lint门禁)+四项重构任务+开发纪律+新政补充大坐标守护
+2026-06-20 | REFACTOR | 宪法重构启动：闭环A/B双绿后，功能冻结，执行REFACTOR-1~4(模板引擎化/守护线框架化/mapper拆分/测试骨架)
+2026-06-20 | REFACTOR_PASS | REFACTOR-1 完成：声明式 PipelineExecutor + coverage_analysis.json 投产。300+行手写 handler 被 JSON 声明 + 通用执行器替代。6引擎dispatch + fallback链 + $ref跨步引用 + validate表达式全部声明式化。CEO实测覆盖率和画布正常
+2026-06-20 | BUGFIX | REFACTOR-1 集成磨合：4个接口bug(import路径/KeyError/coverage_rate双乘100/StepResult契约不全)全部修复。新增宪法第八条：StepResult最小契约
+2026-06-20 | REFACTOR_START | REFACTOR-2 启动：守护线框架化。目标：9个散落 guard → 统一 GuardRegistry + GuardProtocol。同步纳入 StepResult 类型守卫
+2026-06-20 | REFACTOR_PASS | REFACTOR-2 完成：guards.py 独立模块 + GuardChecker + 7守卫函数注册表。pipeline_executor 48行if-elif → 6行GuardChecker包装。JSON声明零变更
+2026-06-20 | I18N_PASS | 日文闭环B验证通过：「避難所_EPSG3857 と 東京行政区_GADM_EPSG3857 で、500m バッファカバー率を分析」。ja_triggers 补充 "バッファカバー率" 后命中。中/日/英三语闭环B全部可用
+2026-06-20 | REFACTOR_START | REFACTOR-3 启动：instruction_mapper 拆分。目标 1700行 → ≤800行/文件
+2026-06-20 | REFACTOR_PASS | REFACTOR-3 完成：1567行单文件→4文件模块。instruction_mapper(112行壳)+template_registry(361行)+handlers_basic(658行Mixin)+handlers_analysis(191行Mixin)。mixin继承零改动路由
+2026-06-20 | REFACTOR_PASS | REFACTOR-4 完成：自动化测试骨架落地。57用例全部通过，零失败。覆盖：模板匹配(23)+Schema解析(15)+Guard边界(15)+闭环集成(4)
+2026-06-20 | MILESTONE | 🎉 Phase 2 宪法重构全部完工。四项重构14天内完成——从vibe slop到可维护工程产品的蜕变。项目现已具备：声明式模板引擎、统一守护框架、模块化架构、自动化测试
+2026-06-20 | PHASE3_START | 地震灾种补齐：盲区分析(gap_analysis)。补齐 loop_b 原始规格中未实现的盲区视角，使地震灾种具备完整的"覆盖+盲区"双视角。声明式引擎首个非coverage模板，验证同引擎不同场景通用性
+2026-06-21 | QA_PASS | gap_analysis 实测通过：盲区图层正常，67.1%盲区率。9步管线前6步与coverage完全复用，仅difference一步+stats两个key为新增。声明式引擎通用性验证通过——同骨架两个模板，修改面仅JSON+引擎method分支
+2026-06-22 | CONSTITUTION | 宪法第九条：输入类型多态守卫。Shapely/QGIS混合管线中fallback链导致下游引擎静默失败的模式已反复触发三次，永久规则：新增引擎必须使用_extract_shapely_or_layer()入口，StepResult必须同时填充shapely_geom和qgis_layer
+2026-06-22 | PHASE3 | 人口加权覆盖分析启动(population_coverage)。在coverage_analysis基础上增加人口矢量面图层输入，pop_intersect步骤+各区面积加权统计，精确计算covered_population/pop_coverage_rate
+2026-06-23 | QA_PASS | population_coverage 实测通过：面积覆盖率31.2%，人口覆盖率56.0%，总人口14,031,625。人口覆盖率(56.0%)远高于面积覆盖率(31.2%)，证伪"面积可替代人口"假设。Bug根因仍是LLM捏造population_field字段名——与闭环A的join_fields幻觉完全同因
+2026-06-23 | PHASE3_NEXT | 震度态势图(situation map)启动（缩小版）。CEO裁定：不做Print Layout API（QGIS最复杂子模块，投入产出比低）。只做JMA配色套用+图层语义识别+PNG导出。标题/凡例/比例尺留给GUI手动添加
+2026-06-23 | QA_PASS | seismic_situation_map 交付通过。550+117行，JMA 8级震度配色常量+图层三元组识别+震度值归一化+QgsMapRendererCustomPainterJob PNG导出。地震专攻五步全齐
+2026-07-07 | FREEZE | 震度态势图模块封存。canvas获取/字段匹配/概率面渲染三个链式bug反复触发，QGIS可视化层工程复杂度超出预期回报。模块代码保留在src/core/，未来需时重新解冻。CEO裁定：四条分析链路已足够支撑面试，态势图改为QGIS手动配色出图
+2026-07-07 | POLISH | 桌面快捷启动交付：aiqgis.ico（QGIS官方图标衍生+电路板元素，5尺寸ico）+ install_shortcut.py + 启动_静默.py修复（sys.path注入替代os.environ PYTHONPATH）。UI按钮蓝色→绿色匹配新图标配色。CEO双击桌面图标即可启动AIQGIS
+2026-07-08 | CLEANUP | Phase 4 项目卫生清整完成。四项交付：删除6个垃圾文件 + SaveAsProjectSkill修复（新增三语触发词路由）+ requirements.txt依赖分离(mem0ai等→optional-requirements.txt) + API Key明文提醒(main.py启动检查) + 安全热修复(prompt_agent/config.py真实Key替换为占位符)。项目达到面试可交付状态
+2026-07-08 | FEATURE | building_risk_analysis 交付。地震第五条分析链路——震度×人口=受灾人口估算。PipelineExecutor pop_intersect 引擎扩展为双模式（覆盖/建筑风险），area 统计新增三键(total_exposed/high_risk/risk_index)。5文件+1新建，~344行
+2026-07-12 | DIRECTION | 三方审查定调。Codex 12条深度审查+Solo裁决+CEO确认：放弃广度(24 handler test)，专注深度——把"覆盖分析"一条路修成铁闭环。5 Blocks: 停用exec绕过/图层识别+用户确认/CRS硬阻断/中途回滚/API Key止血。目标：不懂GIS的人第一次用也能走通
+2026-07-14 | PHASE5_BLOCK1 | exec()后门正式被封存。在线模式不再生成PyQGIS代码，统一输出{action,params} JSON走InstructionMapper.match_and_execute()。影响3文件(ai_worker.py/main_window.py/instruction_mapper.py)，SandboxExecutionWorker保留以备审计。这是项目安全体系最大的一次补丁

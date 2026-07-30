@@ -29,6 +29,8 @@ import os
 import re
 import sys
 
+_log = logging.getLogger("sandbox_worker")
+
 # P0: 统一结果契约 adapter
 from src.core.result_contract import adapt_finished_result
 import tempfile
@@ -137,8 +139,6 @@ if osr is not None:
     SANDBOX_CORE_GLOBALS["osr"] = osr
 if _processing is not None:
     SANDBOX_CORE_GLOBALS["processing"] = _processing
-
-_log = logging.getLogger("sandbox_worker")
 
 # ---------------------------------------------------------------------------
 # SandboxStdoutBridge
