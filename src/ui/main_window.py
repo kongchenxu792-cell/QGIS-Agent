@@ -76,6 +76,8 @@ from qgis.gui import (
 
 
 
+from .. import __version__ as _app_version
+
 from core.ai_worker import (
     AIProcessingWorker,
     append_to_history,
@@ -86,6 +88,7 @@ from core.ai_worker import (
     request_spatial_code,
 )
 from core.config_manager import ConfigManager
+from core.instruction_mapper import InstructionMapper
 from core.layer_loader import create_layer_from_path, is_supported_path, is_table_path, load_layers_from_paths
 from core.multimodal.canvas_capture import CanvasCapture
 from core.output_persistence import generate_output_path, generate_geojson_output_path
@@ -412,6 +415,7 @@ class MainWindow(QMainWindow):
 
         # P1 改造：在线/离线全局模式
         self.config = ConfigManager()
+        self._mapper = InstructionMapper()  # Phase 5 Block 1: 统一匹配执行入口
         # 启动时从 JSON 持久化配置回填 ai_config（文件路径匹配正则异常时的兜底）
         import core.ai_config as ai_config
         if not ai_config.API_KEY and self.config.api_key:
@@ -439,7 +443,7 @@ class MainWindow(QMainWindow):
         self.project_manager = ProjectManager()
 
         self._lm.language_changed.connect(self._apply_language)
-        self.setWindowTitle(self._lm.tr("window_title"))
+        self.setWindowTitle(f"{self._lm.tr('window_title')} v{_app_version}")
         self.resize(1440, 900)
         self._build_ui()
         self._apply_styles()
@@ -593,7 +597,7 @@ class MainWindow(QMainWindow):
 
     def _apply_language(self, lang: str) -> None:
         """响应语言切换信号，刷新所有 UI 文本。"""
-        self.setWindowTitle(self._lm.tr("window_title"))
+        self.setWindowTitle(f"{self._lm.tr('window_title')} v{_app_version}")
         self._refresh_all_labels()
         self.statusBar().showMessage(
             self._lm.tr("status_online") if not self.offline_mode
@@ -1151,7 +1155,7 @@ class MainWindow(QMainWindow):
         """
         from PyQt5.QtWidgets import QFileDialog
 
-        layer = self.map_canvas.currentLayer() if self.map_canvas else None
+        layer = self._get_active_layer()
         if not layer:
             QMessageBox.warning(self, "导出失败", "请先在图层列表中选择一个图层。")
             return
@@ -1230,6 +1234,24 @@ class MainWindow(QMainWindow):
         QgsProject.instance().addMapLayer(layer)
         self.statusBar().showMessage(f"图层已导入：{path}", 8000)
 
+    def _add_layer_from_file(self, path: str) -> None:
+        """从文件静默加载图层到项目，用于管道输出的 GeoJSON 自动加载。"""
+        import os
+        if not os.path.exists(path):
+            _log.warning("_add_layer_from_file: 文件不存在 %s", path)
+            return
+        name = os.path.splitext(os.path.basename(path))[0]
+        layer = QgsVectorLayer(path, name, "ogr")
+        if not layer.isValid():
+            _log.warning("_add_layer_from_file: 无法加载图层 %s", path)
+            return
+        QgsProject.instance().addMapLayer(layer)
+        _log.info("_add_layer_from_file: 已加载 %s", path)
+        # 缩放到新图层
+        if self.map_canvas:
+            self.map_canvas.setExtent(layer.extent())
+            self.map_canvas.refresh()
+
     def _show_api_config(self) -> None:
         """显示 API 配置对话框。"""
         import core.ai_config as ai_config
@@ -1242,39 +1264,13 @@ class MainWindow(QMainWindow):
         if not result:
             return
 
-        # 读取文件、替换、写回
-        import re
-        config_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "core", "ai_config.py"
-        )
         try:
-            with open(config_path, "r", encoding="utf-8") as f:
-                content = f.read()
-            content = re.sub(
-                r'API_KEY(\s*:\s*\w+)?\s*=\s*"[^"]*"',
-                f'API_KEY = "{result["api_key"]}"',
-                content,
-            )
-            content = re.sub(
-                r'BASE_URL(\s*:\s*\w+)?\s*=\s*"[^"]*"',
-                f'BASE_URL = "{result["base_url"]}"',
-                content,
-            )
-            content = re.sub(
-                r'MODEL_NAME(\s*:\s*\w+)?\s*=\s*"[^"]*"',
-                f'MODEL_NAME = "{result["model_name"]}"',
-                content,
-            )
-            with open(config_path, "w", encoding="utf-8") as f:
-                f.write(content)
-
             # 动态更新已加载的模块
             ai_config.API_KEY = result["api_key"]
             ai_config.BASE_URL = result["base_url"]
             ai_config.MODEL_NAME = result["model_name"]
 
-            # P2：同时持久化到 JSON 配置文件（跨版本/重装不丢失）
+            # 持久化到 JSON 配置文件（跨版本/重装不丢失）
             self.config.api_key = result["api_key"]
             self.config.base_url = result["base_url"]
             self.config.model_name = result["model_name"]
@@ -1868,7 +1864,7 @@ class MainWindow(QMainWindow):
             QPushButton {
                 min-width: 100px;
                 min-height: 40px;
-                background: #2563eb;
+                background: #10b981;
                 color: #ffffff;
                 border: none;
                 border-radius: 10px;
@@ -1876,7 +1872,7 @@ class MainWindow(QMainWindow):
                 padding: 0 16px;
             }
             QPushButton:hover {
-                background: #1d4ed8;
+                background: #059669;
             }
             QStatusBar {
                 background: #ffffff;
@@ -2343,6 +2339,8 @@ class MainWindow(QMainWindow):
             project_manager=self.project_manager,
             active_layer_name=active_layer_name,
             viewport_snapshots=self._pending_multimodal_data,
+            canvas=getattr(self, 'map_canvas', None),
+            mapper=self._mapper,
         )
         self._pending_multimodal_data = None
         self.ai_worker.pipeline_ready.connect(self._execute_pipeline)
@@ -2495,6 +2493,8 @@ class MainWindow(QMainWindow):
             project_manager=self.project_manager,
             active_layer_name=active_layer_name,
             viewport_snapshots=None,
+            canvas=getattr(self, 'map_canvas', None),
+            mapper=self._mapper,
         )
         self.ai_worker.pipeline_ready.connect(self._execute_pipeline)
         self.ai_worker.failed.connect(self._handle_ai_error)
@@ -2753,14 +2753,19 @@ class MainWindow(QMainWindow):
                     offline_args = json.loads(arguments) if isinstance(arguments, str) else arguments
                     offline_msg = offline_args.get("message", "")
                     offline_success = offline_args.get("success", False)
+                    output_file = offline_args.get("output_file", "")
                 except Exception:
                     offline_msg = str(arguments)
                     offline_success = False
+                    output_file = ""
                 self.ai_response_display.setPlainText(offline_msg)
                 self.statusBar().showMessage(
                     "离线模式 — 指令已执行" if offline_success else "离线模式 — 问答",
                     5000,
                 )
+                # 自动加载管道输出的图层文件
+                if output_file and os.path.exists(output_file):
+                    self._add_layer_from_file(output_file)
                 append_to_history("user", user_text)
                 append_to_history("assistant", offline_msg[:500])
                 return
@@ -2771,32 +2776,6 @@ class MainWindow(QMainWindow):
                 all_success = False
                 summary_parts.append(f"❌ [{i+1}] {skill_name}: {msg}")
                 break
-
-            # spatial_analysis 需要两步走（AI 生成代码 → 执行）
-            if skill_name == "spatial_analysis":
-                arg_text = arguments or user_text
-                # 注入流水线上下文到参数
-                if pipeline_context:
-                    ctx_desc = "，".join(
-                        f"{k}: {v}" for k, v in pipeline_context.items()
-                    )
-                    arg_text = f"上下文（{ctx_desc}）。{arg_text}"
-                self._dispatch_spatial_analysis(arg_text, pipeline_context)
-                # spatial_analysis 异步执行，无法在流水线中等待
-                # 后续步骤需要用户手动触发
-                summary_parts.append(
-                    f"⏳ [{i+1}] spatial_analysis（代码生成中，请等待预览）"
-                )
-                append_to_history("user", user_text)
-                append_to_history(
-                    "assistant",
-                    f"已分派空间分析任务：{arg_text[:200]}",
-                )
-                append_to_history(
-                    "system",
-                    "[System Notification]: Skill dispatched successfully. Awaiting code generation."
-                )
-                return
 
             # 注入流水线上下文到参数
             if pipeline_context and arguments:
@@ -2940,12 +2919,7 @@ class MainWindow(QMainWindow):
                 QMessageBox.information(self, "AI 响应", reasoning or "无法识别该指令。")
                 return
 
-            if skill_name == "spatial_analysis":
-                self._dispatch_spatial_analysis(
-                    arguments or self.ai_prompt_input.toPlainText().strip()
-                )
-                return
-
+            # Phase 5 Block 1: spatial_analysis 已不再生成代码，统一走 skill_manager 或 instruction_mapper
             mgr = get_skill_manager()
             result = mgr.execute_skill(
                 skill_name,
@@ -2977,140 +2951,6 @@ class MainWindow(QMainWindow):
             _log.exception("AI 响应处理异常，进入回退执行")
             self._fallback_legacy_execution(response_text, exc)
 
-    def _dispatch_spatial_analysis(
-        self, user_text: str, pipeline_context: Optional[Dict[str, Any]] = None
-    ) -> None:
-        """分派空间分析任务：生成代码 → 预览 → 执行。"""
-
-        layer_metadata = self._collect_layer_metadata()
-        if not layer_metadata:
-            QMessageBox.warning(self, "缺少图层", "请先加载图层数据。")
-            return
-
-        # 注入 pipeline_context 到图层元数据（让 AI 知道上下文中有哪些输出图层）
-        # ⚠️ v3.2 修复：动态探测前序输出图层的真实类型（栅格/矢量），杜绝 AI 幻觉
-        if pipeline_context:
-            last_layers = pipeline_context.get("last_output_layers", [])
-            if last_layers:
-                for lname in last_layers:
-                    # 从当前 QGIS 项目图层树中查找真实图层，获取类型/路径/provider
-                    actual_layers = QgsProject.instance().mapLayersByName(lname)
-                    if actual_layers:
-                        real_type = self._layer_type_name(actual_layers[0])
-                        real_path = actual_layers[0].source()
-                        real_provider = actual_layers[0].providerType()
-                    else:
-                        real_type = "未知类型"
-                        real_path = "memory:"
-                        real_provider = "unknown"
-                    layer_metadata.append({
-                        "name": lname,
-                        "type": f"{real_type}（前序步骤输出）",
-                        "path": real_path,
-                        "provider": real_provider,
-                        "is_active": False,
-                    })
-
-        _log.info("分派空间分析任务，图层数：%d", len(layer_metadata))
-        self.statusBar().showMessage("正在生成空间分析代码...")
-
-        # 清空旧代码缓存，强制从最新 Prompt 重新请求 API
-        self.last_ai_code = ""
-
-        # 终止旧代码生成线程（如果还在运行）
-        if hasattr(self, '_code_worker') and self._code_worker is not None:
-            if self._code_worker.isRunning():
-                self._code_worker.terminate()
-                self._code_worker.wait(2000)
-            self._code_worker = None
-
-        # 异步请求代码
-        class CodeWorker(QThread):
-            done = pyqtSignal(str)
-            error = pyqtSignal(str)
-            def run(self):
-                try:
-                    text = request_spatial_code(user_text, layer_metadata)
-                    self.done.emit(text)
-                except Exception as e:
-                    self.error.emit(str(e))
-
-        self._code_worker = CodeWorker(self)
-        self._code_worker.done.connect(self._on_spatial_code_response)
-        self._code_worker.error.connect(
-            lambda e: (_log.error("代码生成失败：%s", e), QMessageBox.critical(self, "代码生成失败", e))
-        )
-        self._code_worker.start()
-
-    def _on_spatial_code_response(self, response_text: str) -> None:
-        """处理空间分析代码生成响应（第二轮 AI 调用）。
-
-        优先级：复合任务 JSON 队列 > 单任务 PyQGIS 代码。
-        """
-        _log.info("收到空间分析代码响应，长度：%d", len(response_text))
-
-        # ── Level 0：复合任务拆解检测 ──
-        task_queue = self._try_parse_task_pipeline(response_text)
-        if task_queue and len(task_queue) >= 2:
-            self.ai_response_display.append(
-                f"\n--- 复合任务拆解（{len(task_queue)} 步）---\n"
-                f"{json.dumps(task_queue, ensure_ascii=False, indent=2)}"
-            )
-            self._start_task_pipeline(task_queue)
-            return
-
-        self.ai_response_display.append(f"\n--- 空间分析代码 ---\n{response_text}")
-        try:
-            code = self._extract_python_code(response_text)
-            self.last_ai_code = code
-
-            if not self.skip_preview:
-                result = AiCodePreviewDialog.preview_and_execute(
-                    self, code, self.ai_prompt_input.toPlainText().strip()
-                )
-                if result is None:
-                    self.statusBar().showMessage("用户取消了执行。", 3000)
-                    return
-                code, skip_confirm = result
-                if skip_confirm:
-                    self.skip_preview = True
-
-            # 异步启动沙箱 Worker，结果通过信号槽网络返回
-            # 图层注册、工程保存、历史持久化 → _on_sandbox_finished()
-            active_layer = self._get_active_layer()
-            layers_by_name = {
-                layer.name(): layer
-                for layer in QgsProject.instance().mapLayers().values()
-            }
-            # 流水线模式：使用步骤专用提示词作为 user_text
-            if self._task_pipeline:
-                step = self._task_pipeline[self._task_pipeline_index]
-                worker_user_text = self._build_single_task_prompt(step)
-            else:
-                worker_user_text = self.ai_prompt_input.toPlainText().strip()
-            self._launch_sandbox_worker(
-                code=code,
-                active_layer=active_layer,
-                layers_by_name=layers_by_name,
-                user_text=worker_user_text,
-            )
-        except Exception as exc:
-            # 二次补刀：代码提取失败时，可能是 AI 输出了混合格式的流水线
-            fallback_queue = self._try_parse_task_pipeline(response_text)
-            if fallback_queue and len(fallback_queue) >= 2:
-                _log.warning(
-                    "代码提取失败，二次解析成功恢复流水线 (%d 步)",
-                    len(fallback_queue),
-                )
-                self.ai_response_display.append(
-                    f"\n--- 复合任务拆解（{len(fallback_queue)} 步，自动恢复）---\n"
-                    f"{json.dumps(fallback_queue, ensure_ascii=False, indent=2)}"
-                )
-                self._start_task_pipeline(fallback_queue)
-                return
-
-            _log.exception("空间分析代码解析失败")
-            QMessageBox.critical(self, "空间分析失败", f"{exc}\n\n{response_text[:300]}")
 
     # ══════════════════════════════════════════════════════════
     # SandboxExecutionWorker 信号槽网络（Pain 2 自愈循环）
@@ -3125,9 +2965,15 @@ class MainWindow(QMainWindow):
     ) -> None:
         """创建并启动 SandboxExecutionWorker（异步，不阻塞 UI 线程）。
 
-        将 exec_globals 构造和 Worker 创建集中在此方法，
-        结果通过信号槽异步返回。首次调用时 retry_count=0。
+        Phase 5 Block 1: 此方法已停用于在线模式。在线 LLM 不再生成 PyQGIS
+        代码，统一走 InstructionMapper.match_and_execute() 确定性执行。
+        
+        保留以备审计。误调用时抛出 NotImplementedError。
         """
+        raise NotImplementedError(
+            "Phase 5 Block 1 后 Sandbox 已停用于在线模式。"
+            "在线/离线统一走 InstructionMapper.match_and_execute()。"
+        )
         import builtins
         import processing
 
@@ -3274,51 +3120,15 @@ class MainWindow(QMainWindow):
         self._execute_next_pipeline_step()
 
     def _execute_next_pipeline_step(self) -> None:
-        """从当前流水线队列取出当前步骤，构建单任务提示词并请求代码生成。
-
-        终止旧 CodeWorker → 构建 step 专用提示词 →
-        启动 CodeWorker 异步请求 → _on_spatial_code_response 接管。
+        """Phase 5 Block 1: 此方法已停用。在线模式不再生成 PyQGIS 代码，
+        统一走 InstructionMapper.match_and_execute() 确定性执行。
+        
+        保留以备审计。
         """
-        idx = self._task_pipeline_index
-        step = self._task_pipeline[idx]
-        total = len(self._task_pipeline)
-        single_prompt = self._build_single_task_prompt(step)
-
-        _log.info("流水线 [%d/%d] 请求代码：%s", idx + 1, total, single_prompt[:120])
-
-        # 终止旧 CodeWorker
-        if hasattr(self, '_code_worker') and self._code_worker is not None:
-            if self._code_worker.isRunning():
-                self._code_worker.terminate()
-                self._code_worker.wait(2000)
-            self._code_worker = None
-
-        # 清空旧代码缓存
-        self.last_ai_code = ""
-
-        # 异步请求单步代码
-        class CodeWorker(QThread):
-            done = pyqtSignal(str)
-            error = pyqtSignal(str)
-
-            def run(self_):
-                try:
-                    text = request_spatial_code(single_prompt, pipeline_layer_metadata)
-                    self_.done.emit(text)
-                except Exception as e:
-                    self_.error.emit(str(e))
-
-        pipeline_layer_metadata = self._task_pipeline_layer_metadata
-        self._code_worker = CodeWorker(self)
-        self._code_worker.done.connect(self._on_spatial_code_response)
-        self._code_worker.error.connect(
-            lambda e: (
-                _log.error("流水线步骤代码生成失败：%s", e),
-                self.statusBar().showMessage(f"流水线 [{idx+1}/{total}] 代码生成失败"),
-                QMessageBox.critical(self, "流水线失败", f"步骤 [{idx+1}] 代码生成失败: {e}"),
-            )
+        raise NotImplementedError(
+            "Phase 5 Block 1 后复合任务流水线已停用。"
+            "在线/离线统一走 InstructionMapper.match_and_execute()。"
         )
-        self._code_worker.start()
 
     def _build_single_task_prompt(self, step: dict) -> str:
         """将复合任务拆解步骤转换为单任务 PyQGIS 代码生成提示词。

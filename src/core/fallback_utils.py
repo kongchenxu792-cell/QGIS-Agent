@@ -7,7 +7,10 @@
 - 通过 System Prompt 的「核心降级调用契约」引导 AI 直接 import 调用
 """
 
+import logging
 import os
+
+_log = logging.getLogger(__name__)
 import time
 import heapq
 import numpy as np
@@ -40,7 +43,7 @@ def _safe_create_output(output_path, cols, rows, bands, gdal_type, geotransform,
             # 文件被锁定，换名
             base, ext = os.path.splitext(output_path)
             actual_path = f"{base}_{int(time.time() * 1000)}{ext}"
-            print(f"[safe_write] 目标锁定，改用: {actual_path}")
+            _log.info(f"[safe_write] 目标锁定，改用: {actual_path}")
             ds = driver.Create(actual_path, cols, rows, bands, gdal_type)
         else:
             raise
@@ -242,15 +245,15 @@ def safe_d8_flow_direction(*args, **kwargs):
                     best_dir = code
             flow_dir[r, c] = best_dir
 
-    driver = gdal.GetDriverByName('GTiff')
-    out_ds = driver.Create(output_path, cols, rows, 1, gdal.GDT_Byte)
-    out_ds.SetGeoTransform(geotransform)
-    out_ds.SetProjection(projection)
+    out_ds, actual_path = _safe_create_output(
+        output_path, cols, rows, 1, gdal.GDT_Byte,
+        geotransform, projection,
+    )
     out_ds.GetRasterBand(1).WriteArray(flow_dir)
     out_ds.FlushCache()
     out_ds = None
 
-    return output_path
+    return actual_path
 
 
 # ── D8 方向编码 ↔ 偏移量映射（全局常量，所有下游函数共用）──
@@ -328,15 +331,15 @@ def safe_flow_accumulation(*args, **kwargs):
                 q.append((nr, nc))
 
     # 写出
-    driver = gdal.GetDriverByName('GTiff')
-    out_ds = driver.Create(output_path, cols, rows, 1, gdal.GDT_Float32)
-    out_ds.SetGeoTransform(geotransform)
-    out_ds.SetProjection(projection)
+    out_ds, actual_path = _safe_create_output(
+        output_path, cols, rows, 1, gdal.GDT_Float32,
+        geotransform, projection,
+    )
     out_ds.GetRasterBand(1).WriteArray(accum)
     out_ds.FlushCache()
     out_ds = None
 
-    return output_path
+    return actual_path
 
 
 def safe_stream_network(*args, **kwargs):
@@ -384,15 +387,15 @@ def safe_stream_network(*args, **kwargs):
 
     stream = (accum >= threshold).astype(np.uint8)
 
-    driver = gdal.GetDriverByName('GTiff')
-    out_ds = driver.Create(output_path, accum.shape[1], accum.shape[0], 1, gdal.GDT_Byte)
-    out_ds.SetGeoTransform(geotransform)
-    out_ds.SetProjection(projection)
+    out_ds, actual_path = _safe_create_output(
+        output_path, accum.shape[1], accum.shape[0], 1, gdal.GDT_Byte,
+        geotransform, projection,
+    )
     out_ds.GetRasterBand(1).WriteArray(stream)
     out_ds.FlushCache()
     out_ds = None
 
-    return output_path
+    return actual_path
 
 
 def safe_basin(*args, **kwargs):
@@ -455,15 +458,15 @@ def safe_basin(*args, **kwargs):
             for pr, pc in path:
                 basin[pr, pc] = resolved_basin
 
-    driver = gdal.GetDriverByName('GTiff')
-    out_ds = driver.Create(output_path, cols, rows, 1, gdal.GDT_Int32)
-    out_ds.SetGeoTransform(geotransform)
-    out_ds.SetProjection(projection)
+    out_ds, actual_path = _safe_create_output(
+        output_path, cols, rows, 1, gdal.GDT_Int32,
+        geotransform, projection,
+    )
     out_ds.GetRasterBand(1).WriteArray(basin)
     out_ds.FlushCache()
     out_ds = None
 
-    return output_path
+    return actual_path
 
 
 # ── 完整水文分析管道（确定性，不依赖 processing） ──
@@ -512,21 +515,21 @@ def safe_complete_hydrological_analysis(dem_path, output_dir, xzq_path, stream_t
     flow_accum = os.path.join(output_dir, "flow_accum.tif")
     stream_raster = os.path.join(output_dir, "stream_raster.tif")
 
-    print(f"[管道] 步骤 1/8: 洼地填充 → {dem_filled}")
-    safe_fill_sinks(dem_path, dem_filled)
+    _log.info(f"[管道] 步骤 1/8: 洼地填充 → {dem_filled}")
+    dem_filled = safe_fill_sinks(dem_path, dem_filled)
 
-    print(f"[管道] 步骤 2/8: 水流方向 → {flow_dir}")
-    safe_d8_flow_direction(dem_filled, flow_dir)
+    _log.info(f"[管道] 步骤 2/8: 水流方向 → {flow_dir}")
+    flow_dir = safe_d8_flow_direction(dem_filled, flow_dir)
 
-    print(f"[管道] 步骤 3/8: 汇流累积 → {flow_accum}")
-    safe_flow_accumulation(flow_dir, flow_accum)
+    _log.info(f"[管道] 步骤 3/8: 汇流累积 → {flow_accum}")
+    flow_accum = safe_flow_accumulation(flow_dir, flow_accum)
 
-    print(f"[管道] 步骤 4/8: 河网提取 (threshold={stream_threshold}) → {stream_raster}")
-    safe_stream_network(flow_accum, stream_raster, threshold=stream_threshold)
+    _log.info(f"[管道] 步骤 4/8: 河网提取 (threshold={stream_threshold}) → {stream_raster}")
+    stream_raster = safe_stream_network(flow_accum, stream_raster, threshold=stream_threshold)
 
     # ── 步骤 5: 河网栅格 → 矢量面 → 矢量线 ──
     stream_vec_shp = os.path.join(output_dir, "stream_vector.shp")
-    print(f"[管道] 步骤 5/8: 栅格河网转矢量 → {stream_vec_shp}")
+    _log.info(f"[管道] 步骤 5/8: 栅格河网转矢量 → {stream_vec_shp}")
 
     # 5a. Polygonize 栅格 → 面
     stream_ds = gdal.Open(stream_raster)
@@ -581,7 +584,7 @@ def safe_complete_hydrological_analysis(dem_path, output_dir, xzq_path, stream_t
 
     # ── 步骤 6: 叠加行政区划 ──
     stream_intersect_shp = os.path.join(output_dir, "stream_intersect.shp")
-    print(f"[管道] 步骤 6/8: 河网与行政区叠加 → {stream_intersect_shp}")
+    _log.info(f"[管道] 步骤 6/8: 河网与行政区叠加 → {stream_intersect_shp}")
 
     # 读取河网线
     stream_src = ogr.Open(stream_vec_shp)
@@ -652,7 +655,7 @@ def safe_complete_hydrological_analysis(dem_path, output_dir, xzq_path, stream_t
 
     # ── 步骤 7: 按村统计沟谷长度 ──
     gully_stats_csv = os.path.join(output_dir, "gully_stats_by_village.csv")
-    print(f"[管道] 步骤 7/8: 统计各村沟谷长度 → {gully_stats_csv}")
+    _log.info(f"[管道] 步骤 7/8: 统计各村沟谷长度 → {gully_stats_csv}")
 
     # 找到区划名称字段（优先中文字段名）
     area_field = None
@@ -701,19 +704,19 @@ def safe_complete_hydrological_analysis(dem_path, output_dir, xzq_path, stream_t
 
     # ── 步骤 8: 沟壑密度汇总 ──
     gully_density_csv = os.path.join(output_dir, "gully_density_summary.csv")
-    print(f"[管道] 步骤 8/8: 沟壑密度汇总 → {gully_density_csv}")
+    _log.info(f"[管道] 步骤 8/8: 沟壑密度汇总 → {gully_density_csv}")
     # 复制到 density 文件
     import shutil
     shutil.copy2(gully_stats_csv, gully_density_csv)
 
-    print(f"\n[管道] ── 全部完成 ──")
-    print(f"  填充 DEM:    {dem_filled}")
-    print(f"  水流方向:    {flow_dir}")
-    print(f"  汇流累积:    {flow_accum}")
-    print(f"  栅格河网:    {stream_raster}")
-    print(f"  矢量河网:    {stream_vec_shp}")
-    print(f"  叠加结果:    {stream_intersect_shp}")
-    print(f"  沟谷统计:    {gully_stats_csv}")
+    _log.info(f"\n[管道] ── 全部完成 ──")
+    _log.info(f"  填充 DEM:    {dem_filled}")
+    _log.info(f"  水流方向:    {flow_dir}")
+    _log.info(f"  汇流累积:    {flow_accum}")
+    _log.info(f"  栅格河网:    {stream_raster}")
+    _log.info(f"  矢量河网:    {stream_vec_shp}")
+    _log.info(f"  叠加结果:    {stream_intersect_shp}")
+    _log.info(f"  沟谷统计:    {gully_stats_csv}")
 
     return {
         "dem_filled": dem_filled,

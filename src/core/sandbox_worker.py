@@ -12,7 +12,7 @@ QGIS 非线程安全约束：
   采用 Monkey-patch 拦截到 _deferred_layers 列表，finished 信号携带回主线程安全加载。
 
 SandboxStdoutBridge：
-  io.StringIO 子类，exec 代码中 print() 输出逐行回调通知 Worker，
+  io.StringIO 子类，exec 代码中 _log.info() 输出逐行回调通知 Worker，
   Worker 通过 stdout_line 信号透传到主线程 UI。
 
 自愈编排设计（调用方负责）：
@@ -28,6 +28,9 @@ import logging
 import os
 import re
 import sys
+
+# P0: 统一结果契约 adapter
+from src.core.result_contract import adapt_finished_result
 import tempfile
 import traceback
 from typing import Any, Callable, Dict, List, Optional
@@ -60,9 +63,9 @@ def _initialize_portable_env():
         if os.path.isdir(_proj_path):
             os.environ["PROJ_LIB"] = _proj_path
             os.environ["PROJ_DATA"] = _proj_path
-            print(f"[Sandbox环境激活] PROJ 路径: {_proj_path}")
+            _log.info(f"[Sandbox环境激活] PROJ 路径: {_proj_path}")
     except Exception as _e:
-        print(f"[Sandbox环境激活] 异常: {_e}")
+        _log.info(f"[Sandbox环境激活] 异常: {_e}")
 
 # 标记：初始化函数需在 import gdal 之前调用
 _INITIALIZE_LATER = True
@@ -142,7 +145,7 @@ _log = logging.getLogger("sandbox_worker")
 # ---------------------------------------------------------------------------
 
 class SandboxStdoutBridge(io.StringIO):
-    """捕获 exec_globals 中 print() 输出，每行回调通知。
+    """捕获 exec_globals 中 _log.info() 输出，每行回调通知。
 
     Worker 侧在回调中发射 stdout_line 信号，实现跨线程逐行透传。
     避免一次性 dump 整块 stdout 导致 UI 渲染假死。
@@ -178,7 +181,7 @@ class SandboxExecutionWorker(QThread):
 
     信号：
         progress(str)     — 阶段进度通知（CRS/快照/执行/GC）
-        stdout_line(str)  — exec 代码中 print() 输出的每一行（主线程安全）
+        stdout_line(str)  — exec 代码中 _log.info() 输出的每一行（主线程安全）
         finished(dict)    — 执行成功。
             {'result': Any, 'pending_layers': [...], 'gc_removed': [...],
              'stdout': str, 'retry_count': int}
@@ -207,6 +210,7 @@ class SandboxExecutionWorker(QThread):
         active_layer=None,
         layers_by_name: Optional[Dict[str, Any]] = None,
         user_query: str = "",
+        skill_name: str = "",
         retry_count: int = 0,
     ):
         """初始化沙箱执行 Worker。
@@ -223,6 +227,8 @@ class SandboxExecutionWorker(QThread):
             {图层名: QgsMapLayer} 映射，供 CRS 防御在校验时对齐。
         user_query : str
             用户原始问题，供 fix_needed 上下文回传给 LLM。
+        skill_name : str
+            技能名称，透传到 result_contract.stats["_skill"]。
         retry_count : int
             当前是第几次重试（0 = 首次执行），透传到 finished / fix_needed。
         """
@@ -232,6 +238,7 @@ class SandboxExecutionWorker(QThread):
         self._active_layer = active_layer
         self._layers_by_name = layers_by_name or {}
         self._user_query = user_query
+        self._skill_name = skill_name
         self._retry_count = retry_count
 
         # 内部状态
@@ -387,12 +394,13 @@ class SandboxExecutionWorker(QThread):
                         input_path = _resolve_to_path(params.get(in_key, ""))
                         output_path = _resolve_to_path(params.get(out_key, ""))
                         if input_path and output_path:
-                            print(f"[降级路由] {algo_id} -> "
+                            _log.info(f"[降级路由] {algo_id} -> "
                                   f"{func.__name__}({os.path.basename(input_path)}, "
                                   f"{os.path.basename(output_path)})")
                             try:
-                                func(input_path, output_path)
-                                return {out_key: output_path}
+                                ret = func(input_path, output_path)
+                                actual_output = ret if isinstance(ret, str) and ret else output_path
+                                return {out_key: actual_output}
                             except Exception as _fe:
                                 raise RuntimeError(
                                     f"[降级路由失败] {algo_id} -> {func.__name__}: {_fe}"
@@ -450,7 +458,7 @@ class SandboxExecutionWorker(QThread):
                      or "Algorithm" in _exc_msg)
             )
             if _is_hydro_fail:
-                print("[自愈] 检测到水文分析管道中断，自动切换确定性管道...")
+                _log.info("[自愈] 检测到水文分析管道中断，自动切换确定性管道...")
                 _data_dir = None
                 # 从 AI 代码中提取所有引号包裹的文件路径，找到 DEM 所在目录
                 _path_matches = re.findall(r"""["']([A-Za-z]:\\[^"'\n]*?\.[a-zA-Z0-9]{3,4})["']""", code_str)
@@ -475,9 +483,9 @@ class SandboxExecutionWorker(QThread):
                     if os.path.exists(_dem_path) and os.path.exists(_xzq_path):
                         try:
                             from src.core.fallback_utils import safe_complete_hydrological_analysis
-                            print(f"[自愈] DEM: {_dem_path}")
-                            print(f"[自愈] XZQ: {_xzq_path}")
-                            print(f"[自愈] 输出: {_data_dir}")
+                            _log.info(f"[自愈] DEM: {_dem_path}")
+                            _log.info(f"[自愈] XZQ: {_xzq_path}")
+                            _log.info(f"[自愈] 输出: {_data_dir}")
                             _result = safe_complete_hydrological_analysis(
                                 dem_path=_dem_path,
                                 output_dir=_data_dir,
@@ -485,16 +493,16 @@ class SandboxExecutionWorker(QThread):
                             )
                             exec_globals["_pipeline_result"] = _result
                             exec_globals["result"] = _result
-                            print("[自愈] 确定性水文管道执行成功！")
+                            _log.info("[自愈] 确定性水文管道执行成功！")
                             # 不重新抛出，让 run() 认为执行成功
                         except Exception as _pipeline_exc:
-                            print(f"[自愈] 确定性管道执行失败: {_pipeline_exc}")
+                            _log.info(f"[自愈] 确定性管道执行失败: {_pipeline_exc}")
                             raise  # 管道也失败，继续抛出原始异常
                     else:
-                        print(f"[自愈] 找不到 DEM 或 xzq，跳过自愈。DEM={_dem_path}, XZQ={_xzq_path}")
+                        _log.info(f"[自愈] 找不到 DEM 或 xzq，跳过自愈。DEM={_dem_path}, XZQ={_xzq_path}")
                         raise
                 else:
-                    print(f"[自愈] 无法从代码中提取数据路径，跳过自愈。")
+                    _log.info(f"[自愈] 无法从代码中提取数据路径，跳过自愈。")
                     raise
             else:
                 raise
@@ -569,13 +577,29 @@ class SandboxExecutionWorker(QThread):
                 gc_removed = []
 
             # ── 成功 ──
-            self.finished.emit({
+            raw_data = {
                 "result": result,
                 "pending_layers": list(self._deferred_layers),
                 "gc_removed": gc_removed,
                 "stdout": bridge.getvalue(),
                 "retry_count": self._retry_count,
-            })
+            }
+            # P0: 适配为统一结果契约
+            contract_data = adapt_finished_result(
+                sandbox_result=raw_data,
+                skill_name=self._skill_name,
+                user_query=self._user_query,
+            )
+            # 向后兼容：保留原始字段供下游消费者直接访问
+            contract_data["_raw_pending_layers"] = list(self._deferred_layers)
+            contract_data["_raw_result"] = result
+            contract_data["_raw_stdout"] = bridge.getvalue()
+            contract_data["pending_layers"] = list(self._deferred_layers)
+            contract_data["result"] = result
+            contract_data["stdout"] = bridge.getvalue()
+            contract_data["retry_count"] = self._retry_count
+            contract_data["gc_removed"] = gc_removed
+            self.finished.emit(contract_data)
 
         except SyntaxError as exc:
             line_no = exc.lineno or 0

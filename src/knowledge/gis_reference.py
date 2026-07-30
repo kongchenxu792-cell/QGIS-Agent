@@ -8,6 +8,10 @@ GIS Python API 知识库 — 来自 opengis-skills 的精选模式
 按 AIQGIS 场景裁切：不引入 pandas，不依赖额外第三方包。
 """
 
+import logging
+
+_log = logging.getLogger(__name__)
+
 # ═══════════════════════════════════════════════════════════════
 # 第一部分：PyQGIS Processing 核心模式
 # ═══════════════════════════════════════════════════════════════
@@ -110,11 +114,11 @@ GDAL_API_PATTERNS = """
 ```python
 from osgeo import gdal, gdal_array
 ds = gdal.Open(r'D:/data/dem.tif')
-print(ds.RasterXSize, ds.RasterYSize, ds.RasterCount)
-print(ds.GetProjection())
-print(ds.GetGeoTransform())  # (origin_x, pixel_w, 0, origin_y, 0, -pixel_h)
+_log.info(ds.RasterXSize, ds.RasterYSize, ds.RasterCount)
+_log.info(ds.GetProjection())
+_log.info(ds.GetGeoTransform())  # (origin_x, pixel_w, 0, origin_y, 0, -pixel_h)
 band = ds.GetRasterBand(1)
-print(band.GetNoDataValue(), band.DataType, band.GetStatistics(True, True))
+_log.info(band.GetNoDataValue(), band.DataType, band.GetStatistics(True, True))
 arr = band.ReadAsArray()  # NumPy ndarray
 ds = None  # 关闭
 ```

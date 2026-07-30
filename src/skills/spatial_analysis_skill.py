@@ -12,10 +12,13 @@ Phase 4 强化 — 表格空间化与表头感知（绝不依赖第三方库）�
 - 智能建点：read_table_fields() 抓取列名 → 语义推断 X/Y 字段 → native:createpointslayerfromtable
 - 完整链路：拖入 Excel → OGR 加载 → 建点 → 重投影 → 核密度 → 纯画布导出
 
-结果持久化到 output/shapefiles/，应用重启后数据不丢失。
+结果持久化到 user_data/exports/shapefiles/，应用重启后数据不丢失。
 """
 
+import logging
 import os
+
+_log = logging.getLogger(__name__)
 import tempfile
 from typing import Any, Dict, List, Optional
 
@@ -98,7 +101,7 @@ def global_intercepted_run(algorithm_name, *args, **kwargs):
     # 1. 拦截核密度 / 热力图请求，防止 C++ 后端缺失导致崩溃
     alg_lower = algorithm_name.lower()
     if "density" in alg_lower or "heatmap" in alg_lower or "kernel" in alg_lower:
-        print(f"[Intercept] Intercepting KDE algorithm: {algorithm_name}")
+        _log.info(f"[Intercept] Intercepting KDE algorithm: {algorithm_name}")
         target_layer = None
         input_val = params.get('INPUT') if params else None
 
@@ -137,7 +140,7 @@ def global_intercepted_run(algorithm_name, *args, **kwargs):
                 radius = 2.5
 
             heatmap_renderer.setRadius(radius)
-            print(f"[智能适配] 大模型半径参数按视觉换算为: {radius} 像素")
+            _log.info(f"[智能适配] 大模型半径参数按视觉换算为: {radius} 像素")
 
             color_ramp = QgsStyle.defaultStyle().colorRamp("Magma")
             if color_ramp:
@@ -332,8 +335,8 @@ class SpatialAnalysisSkill(BaseSkill):
         "})\n"
         "```\n"
         "严禁 import pandas / openpyxl / xlrd / csv 来解析表格，违者必崩溃！\n\n"
-        "## 刚性禁令：禁止 print() 控制台输出\n"
-        "在生成的 Python 业务代码中严禁使用 print() 函数打印任何信息。\n"
+        "## 刚性禁令：禁止 _log.info() 控制台输出\n"
+        "在生成的 Python 业务代码中严禁使用 _log.info() 函数打印任何信息。\n"
         "如果需要检查字段列表或中间数据，直接赋值给变量在后台处理，不要打印到控制台。\n"
         "将所有精力集中在 OGR 加载 → native:createpointslayerfromtable → 重投影 → 核密度 → 导出的核心链路上。\n\n"
         "## 刚性禁令：严禁触发任何 UI 弹窗\n"
@@ -384,7 +387,7 @@ class SpatialAnalysisSkill(BaseSkill):
             "  建点链路：OGR加载 → read_table_fields() 抓列名 → 语义推断X/Y →\n"
             "  native:createpointslayerfromtable 建点 → reproject → 核密度→ 导出\n"
             "- 注意：此技能用于生成并执行 PyQGIS 代码，arguments 为客户原始指令\n"
-            "- 输出：所有结果持久化到 output/shapefiles/，自动加载到画布\n"
+            "- 输出：所有结果持久化到 user_data/exports/shapefiles/，自动加载到画布\n"
             f"{self.TABLE_SPATIALIZATION_RULES}"
         )
 
@@ -842,6 +845,7 @@ class SpatialAnalysisSkill(BaseSkill):
             active_layer=active_layer,
             layers_by_name=layers_by_name or {},
             user_query=arguments or "",
+            skill_name="spatial_analysis",
         )
 
         result_data: Dict[str, Any] = {}

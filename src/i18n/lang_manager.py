@@ -5,8 +5,11 @@
 """
 
 import json
+import logging
 import os
 from typing import Dict
+
+_log = logging.getLogger(__name__)
 
 from PyQt5.QtCore import QObject, pyqtSignal
 
@@ -58,7 +61,7 @@ class LangManager(QObject):
                 with open(path, "r", encoding="utf-8") as f:
                     self._data[lang] = json.load(f)
             except (FileNotFoundError, json.JSONDecodeError) as exc:
-                print(f"[LangManager] 加载 {lang}.json 失败: {exc}")
+                _log.info(f"[LangManager] 加载 {lang}.json 失败: {exc}")
                 self._data[lang] = {}
 
         # 从 config 恢复上次语言设置
@@ -116,7 +119,7 @@ class LangManager(QObject):
             是否成功切换。
         """
         if lang not in self.SUPPORTED_LANGS:
-            print(f"[LangManager] 不支持的语言代码: {lang}")
+            _log.info(f"[LangManager] 不支持的语言代码: {lang}")
             return False
 
         if lang == self.current_lang:

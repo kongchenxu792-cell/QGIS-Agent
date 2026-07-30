@@ -44,7 +44,7 @@ def generate_output_path(
     Returns
     -------
     str
-        格式：output/shapefiles/{skill_prefix}_{timestamp}_{sanitized_name}{extension}
+        格式：user_data/exports/shapefiles/{skill_prefix}_{timestamp}_{sanitized_name}{extension}
     """
     ensure_output_dir()
 

@@ -47,7 +47,7 @@ def geoagent_pre_execution_guard(skill_name: str, params: Dict[str, Any]) -> Dic
     if not params:
         return params
 
-    print(f"[GeoAgent 防御卫士] 正在对技能 '{skill_name}' 进行空间契约校验...")
+    _log.info(f"[GeoAgent 防御卫士] 正在对技能 '{skill_name}' 进行空间契约校验...")
 
     # ── 加载 QGIS API ──
     try:
@@ -62,7 +62,7 @@ def geoagent_pre_execution_guard(skill_name: str, params: Dict[str, Any]) -> Dic
     # ── 防御 B：时空绝对对齐防御（防 CRS 错位） ──
     _guard_crs_alignment(skill_name, params, QgsProject)
 
-    print(f"[GeoAgent 防御卫士] 技能 '{skill_name}' 前置防御完成。")
+    _log.info(f"[GeoAgent 防御卫士] 技能 '{skill_name}' 前置防御完成。")
     return params
 
 
@@ -91,7 +91,7 @@ def geoagent_post_execution_guard(
 
     # ── 防御 C：类型防崩（字符串路径 → QgsVectorLayer） ──
     if isinstance(output_result, str):
-        print(
+        _log.info(
             f"[类型安全纠回] 拦截到字符串路径: {output_result}，"
             f"正在实例化为合法的 QgsVectorLayer 对象..."
         )
@@ -106,15 +106,15 @@ def geoagent_post_execution_guard(
                 final_layer = QgsVectorLayer(output_result, display_name, "ogr")
 
             if final_layer.isValid():
-                print(f"[类型安全纠回] 成功实例化为: {type(final_layer).__name__}")
+                _log.info(f"[类型安全纠回] 成功实例化为: {type(final_layer).__name__}")
                 return final_layer
             else:
-                print(
+                _log.info(
                     f"[类型安全纠回] 实例化失败，保留原始路径: {output_result}"
                 )
                 return output_result
         except Exception as e:
-            print(f"[类型安全纠回] 异常，保留原始结果: {e}")
+            _log.info(f"[类型安全纠回] 异常，保留原始结果: {e}")
             return output_result
 
     return output_result
@@ -184,7 +184,7 @@ def _guard_param_swap(
     if input_gt == 2 and overlay_gt == 0:
         input_name = getattr(input_val, "name", lambda: str(input_val))() if hasattr(input_val, "name") else str(input_val)
         overlay_name = getattr(overlay_val, "name", lambda: str(overlay_val))() if hasattr(overlay_val, "name") else str(overlay_val)
-        print(
+        _log.info(
             "[防御预警] 发现大模型将切刀与蛋糕参数传反！"
             f"（INPUT={input_name} 是面，OVERLAY={overlay_name} 是点）"
             " 已自动启动矢量对调纠错机制。"
@@ -196,7 +196,7 @@ def _guard_param_swap(
     # 其他异常组合：警告但不强制修改
     input_name = input_layer.name()
     overlay_name = overlay_layer.name()
-    print(
+    _log.info(
         f"[防御注意] 裁剪参数几何类型组合可疑 "
         f"（INPUT={input_name} gt={input_gt}，"
         f"OVERLAY={overlay_name} gt={overlay_gt}），跳过自动对调。"
@@ -231,11 +231,11 @@ def _guard_crs_alignment(
     if input_crs == overlay_crs:
         return
 
-    print(
+    _log.info(
         f"[CRS 强行对齐] 检测到坐标系冲突 "
         f"（INPUT={input_crs} vs OVERLAY={overlay_crs}）。"
     )
-    print("正在后台自动、无感调用 native:reprojectlayer 将切刀对齐至主图层坐标系...")
+    _log.info("正在后台自动、无感调用 native:reprojectlayer 将切刀对齐至主图层坐标系...")
 
     try:
         import processing
@@ -250,11 +250,11 @@ def _guard_crs_alignment(
         aligned = reproject_res.get("OUTPUT")
         if aligned is not None:
             params["OVERLAY"] = aligned
-            print(
+            _log.info(
                 f"[CRS 强行对齐] 切刀已重投影至 {input_crs}，"
                 f"掉包 OVERLAY 为内存图层对象。"
             )
         else:
-            print("[CRS 强行对齐] 重投影返回空，保留原 OVERLAY 参数。")
+            _log.info("[CRS 强行对齐] 重投影返回空，保留原 OVERLAY 参数。")
     except Exception as e:
-        print(f"[CRS 强行对齐] 重投影异常，保留原参数继续：{e}")
+        _log.info(f"[CRS 强行对齐] 重投影异常，保留原参数继续：{e}")

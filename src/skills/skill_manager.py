@@ -1,5 +1,7 @@
 """技能管理器 - 启动时自动扫描、加载、注册所有技能模块。"""
 
+import logging
+_log = logging.getLogger(__name__)
 import importlib
 import os
 from pathlib import Path
@@ -39,7 +41,7 @@ class SkillManager:
                         instance = attr()
                         self._skills[instance.get_name()] = instance
             except Exception as e:
-                print(f"[SkillManager] 加载 {module_name} 失败: {e}")
+                _log.info(f"[SkillManager] 加载 {module_name} 失败: {e}")
 
     def register(self, skill: BaseSkill) -> None:
         """手动注册一个技能。"""

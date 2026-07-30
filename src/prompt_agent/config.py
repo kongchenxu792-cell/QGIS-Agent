@@ -4,7 +4,7 @@
 """
 
 #: 独立 API 密钥
-API_KEY = "sk-95e4e46cf9034a9a9320e19ab6acfcea"
+API_KEY = ""  # 部署时从环境变量或配置文件注入
 
 #: 独立 API 端点
 BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"

@@ -2,10 +2,13 @@
 裁剪技能 — 封装 QGIS native:clip 算法。
 
 用叠加图层的边界裁剪输入图层，保留重叠区域内的要素。
-结果持久化到 output/shapefiles/，应用重启后数据不丢失。
+结果持久化到 user_data/exports/shapefiles/，应用重启后数据不丢失。
 """
 
+import logging
 import os
+
+_log = logging.getLogger(__name__)
 from typing import Any, Dict, List
 
 from qgis.core import QgsProject, QgsVectorLayer, QgsMapLayer
@@ -64,11 +67,11 @@ class ClipSkill(BaseSkill):
         output_path = generate_output_path("clip", input_layer.name())
 
         # CRS 对齐：若输入图层与边界图层坐标系不一致，先将边界重投影至与输入一致
-        print(f"[CRS对齐拦截] 蛋糕坐标系: {input_layer.crs().authid()}, 切刀坐标系: {overlay_layer.crs().authid()}")
+        _log.info(f"[CRS对齐拦截] 蛋糕坐标系: {input_layer.crs().authid()}, 切刀坐标系: {overlay_layer.crs().authid()}")
 
         final_overlay = overlay_layer
         if input_layer.crs().authid() != overlay_layer.crs().authid():
-            print(f"[CRS对齐] 坐标系不一致！正在将切刀动态对齐到: {input_layer.crs().authid()}")
+            _log.info(f"[CRS对齐] 坐标系不一致！正在将切刀动态对齐到: {input_layer.crs().authid()}")
             reproject_res = processing.run("native:reprojectlayer", {
                 'INPUT': overlay_layer,
                 'TARGET_CRS': input_layer.crs(),
@@ -86,7 +89,7 @@ class ClipSkill(BaseSkill):
         from .geoagent_guard import geoagent_pre_execution_guard
         params = geoagent_pre_execution_guard("clip", params)
 
-        print("[CRS对齐] 正在执行同坐标系裁剪算子...")
+        _log.info("[CRS对齐] 正在执行同坐标系裁剪算子...")
         result = processing.run("native:clip", params)
 
         # FIXED: native:clip 返回的是文件路径字符串，不是 QgsVectorLayer 对象
@@ -127,7 +130,7 @@ class ClipSkill(BaseSkill):
         if canvas and hasattr(canvas, "refresh"):
             canvas.refresh()
 
-        print(f"[成功通关] 裁剪后的图层已完美加载：{new_name}")
+        _log.info(f"[成功通关] 裁剪后的图层已完美加载：{new_name}")
         return {
             "success": True,
             "message": f"裁剪完成：{input_layer.name()} × {overlay_layer.name()} → {new_name}",

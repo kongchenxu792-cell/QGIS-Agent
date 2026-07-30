@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional
 from PyQt5.QtCore import QThread, pyqtSignal
 
 import core.ai_config as ai_config
+from core.instruction_mapper import InstructionMapper
 
 _log = logging.getLogger("ai_worker")
 
@@ -247,6 +248,107 @@ def build_system_prompt(layer_metadata: Optional[List[Dict[str, Any]]] = None,
         f"{history_text}\n\n"
         "## 可用技能清单\n\n"
         f"{skills_section}\n"
+        "## PyQGIS Processing 算法速查（spatial_analysis 技能内部可用）\n\n"
+        "当用户请求的空间分析操作超出独立技能范围时，会自动路由到 spatial_analysis 技能，\n"
+        "由 AI 生成 PyQGIS 代码自由调用以下 QGIS 原生 Processing 算法。\n\n"
+        "### 核心向量算子（native: 前缀）\n\n"
+        "1. native:buffer\n"
+        "   参数: INPUT(矢量图层), DISTANCE(浮点数,CRS单位), SEGMENTS(整数1-99,默认8),\n"
+        "         END_CAP_STYLE(0=Round 1=Flat 2=Square), JOIN_STYLE(0=Round 1=Miter 2=Bevel),\n"
+        "         DISSOLVE(布尔,默认False), OUTPUT(路径 或 'TEMPORARY_OUTPUT')\n"
+        "   ⚠️ 经纬度图层(如EPSG:4326)须先 reproject 到米制投影(如EPSG:3857)，\n"
+        "      否则 DISTANCE 是度不是米，结果完全错误！\n\n"
+        "2. native:clip\n"
+        "   参数: INPUT(矢量图层), OVERLAY(多边形图层,裁剪边界), OUTPUT\n"
+        "   ⚠️ OVERLAY 必须为多边形类型，点/线图层会直接报错\n\n"
+        "3. native:intersection\n"
+        "   参数: INPUT(矢量图层), OVERLAY(矢量图层), OUTPUT\n"
+        "   ⚠️ 两图层几何类型必须兼容（点∩面=点, 线∩面=线, 面∩面=面）\n\n"
+        "4. native:dissolve\n"
+        "   参数: INPUT(矢量图层), FIELD(字符串列表,按字段融合,空列表=全部融合),\n"
+        "         DISSOLVE_ALL(布尔,默认False), OUTPUT\n"
+        "   ⚠️ 融合前建议先跑 native:fixgeometries，无效几何会导致融合失败\n\n"
+        "5. native:difference\n"
+        "   参数: INPUT(矢量图层), OVERLAY(矢量图层), OUTPUT\n"
+        "   ⚠️ 结果 = INPUT 减去与 OVERLAY 相交的部分\n\n"
+        "6. native:union\n"
+        "   参数: INPUT(矢量图层), OVERLAY(矢量图层), OUTPUT\n"
+        "   ⚠️ 两图层 CRS 必须一致，否则结果错位\n\n"
+        "7. native:fieldcalculator\n"
+        "   参数: INPUT(矢量图层), FIELD_NAME(字符串,新字段名),\n"
+        "         FIELD_TYPE(0=Float 1=Integer 2=String 3=Date),\n"
+        "         FIELD_LENGTH(整数), FIELD_PRECISION(整数,仅Float), FORMULA(表达式), OUTPUT\n"
+        "   ⚠️ $area 返回 CRS 单位的面积；经纬度图层 $area 是平方度，无意义！\n"
+        "   ⚠️ 字段名含中文/特殊字符时，表达式用双引号括起: \"字段名\"\n\n"
+        "8. native:reprojectlayer\n"
+        "   参数: INPUT(图层), TARGET_CRS(QgsCoordinateReferenceSystem对象), OUTPUT\n"
+        "   示例: TARGET_CRS = QgsCoordinateReferenceSystem('EPSG:3857')\n\n"
+        "9. native:fixgeometries\n"
+        "   参数: INPUT(矢量图层), OUTPUT\n"
+        "   ⚠️ 始终在处理链第一步调用，清除自交/空洞/重复节点\n\n"
+        "10. native:centroids\n"
+        "    参数: INPUT(矢量图层), ALL_PARTS(布尔,多部件是否返回全部质心), OUTPUT\n\n"
+        "11. native:extractbyexpression / native:selectbyexpression\n"
+        "    参数: INPUT(矢量图层), EXPRESSION(SQL风格表达式), OUTPUT\n"
+        "    ⚠️ 字段名含中文或空格时须用双引号: \"行政区\" LIKE '%成都%'\n"
+        "    ⚠️ 字符串值用单引号: \"name\" = 'Tokyo'\n\n"
+        "12. native:joinattributestable\n"
+        "    参数: INPUT(主图层), FIELD(主图层连接字段名),\n"
+        "          INPUT_2(附表图层), FIELD_2(附表连接字段名),\n"
+        "          FIELDS_TO_COPY(可选,要复制的字段列表,空=全部),\n"
+        "          METHOD(0=一对一 1=一对多,默认0), OUTPUT\n"
+        "   ⚠️ 附表可能含编码问题，连接后检查字段名是否乱码\n"
+        "   ⚠️ FIELD 和 FIELD_2 是字段名（字符串），不是字段值！\n\n"
+        "### 栅格分析（gdal: 前缀）\n\n"
+        "13. gdal:slope\n"
+        "    参数: INPUT(DEM栅格图层), Z_FACTOR(浮点,高程/水平单位比,默认1), OUTPUT\n"
+        "    ⚠️ 经纬度DEM需要 Z_FACTOR≈111320.0（1度≈111km），否则坡度值无意义\n\n"
+        "14. gdal:aspect\n"
+        "    参数: INPUT(DEM栅格图层), OUTPUT\n"
+        "    ⚠️ 输出 0-360，0=北 90=东 180=南 270=西\n\n"
+        "15. gdal:hillshade\n"
+        "    参数: INPUT(DEM), Z_FACTOR(浮点,默认1), AZIMUTH(光照方位角0-360,默认315),\n"
+        "          ALTITUDE(太阳高度角0-90,默认45), OUTPUT\n\n"
+        "16. gdal:cliprasterbymasklayer\n"
+        "    参数: INPUT(栅格), MASK(矢量多边形), SOURCE_CRS(可选), TARGET_CRS(可选),\n"
+        "          NODATA(浮点,默认-9999), CROP_TO_CUTLINE(布尔,默认True), OUTPUT\n"
+        "    ⚠️ 如果 INPUT 和 MASK 坐标系不同，必须填 SOURCE_CRS / TARGET_CRS\n\n"
+        "17. gdal:contour\n"
+        "    参数: INPUT(DEM), INTERVAL(浮点,等高距), FIELD_NAME(字符串,默认'ELEV'), OUTPUT\n\n"
+        "### 核密度与统计（qgis: 前缀）\n\n"
+        "18. qgis:heatmapkerneldensityestimation\n"
+        "    参数: INPUT(点图层), RADIUS(整数,搜索半径,CRS单位), PIXEL_SIZE(整数,输出像元大小), OUTPUT\n"
+        "    ⚠️ 需要米制投影坐标系，经纬度点图层必须先 reproject\n"
+        "    ⚠️ 本项目前端渲染已接管该算法（HeatmapRenderSuccessException），不必恐慌\n\n"
+        "19. qgis:statisticsbycategories\n"
+        "    参数: INPUT(矢量图层), VALUES_FIELD_NAME(统计目标字段),\n"
+        "          CATEGORIES_FIELD_NAME(分类字段), OUTPUT\n\n"
+        "### 调用范式（生成 PyQGIS 代码时严格遵循）\n"
+        "```python\n"
+        "import processing\n"
+        "from qgis.core import QgsCoordinateReferenceSystem\n\n"
+        "# 范式 1：单步操作\n"
+        "result = processing.run('native:buffer', {\n"
+        "    'INPUT': layers_by_name['roads'],\n"
+        "    'DISTANCE': 500.0,\n"
+        "    'SEGMENTS': 12,\n"
+        "    'OUTPUT': generate_output_path('buffer', 'roads')\n"
+        "})\n\n"
+        "# 范式 2：链式处理（前步输出直接当后步输入）\n"
+        "step1 = processing.run('native:reprojectlayer', {\n"
+        "    'INPUT': layers_by_name['points'],\n"
+        "    'TARGET_CRS': QgsCoordinateReferenceSystem('EPSG:3857'),\n"
+        "    'OUTPUT': 'TEMPORARY_OUTPUT'\n"
+        "})\n"
+        "# 引用前步输出的图层对象（用字典键 'OUTPUT'，不是图层名）\n"
+        "step2 = processing.run('native:buffer', {\n"
+        "    'INPUT': step1['OUTPUT'],\n"
+        "    'DISTANCE': 1000.0,\n"
+        "    'SEGMENTS': 16,\n"
+        "    'OUTPUT': generate_output_path('buffer_m', 'points')\n"
+        "})\n"
+        "result = step2\n"
+        "```\n\n"
         "## 输出格式要求（极其重要）\n\n"
         "你必须**只输出**一个严格的 JSON 数组，不要输出任何其他内容。\n"
         "数组中每个元素代表流水线中的一个步骤，按执行顺序排列：\n\n"
@@ -351,7 +453,9 @@ class AIProcessingWorker(QThread):
     def __init__(self, user_text: str, layer_metadata: List[Dict[str, Any]],
                  pipeline_context: Optional[Dict[str, Any]] = None,
                  project_manager=None, active_layer_name: str = "",
-                 viewport_snapshots: Optional[List[Dict[str, Any]]] = None) -> None:
+                 viewport_snapshots: Optional[List[Dict[str, Any]]] = None,
+                 canvas=None,
+                 mapper: Optional[InstructionMapper] = None) -> None:
         super().__init__()
         self.user_text = user_text
         self.layer_metadata = layer_metadata
@@ -359,6 +463,8 @@ class AIProcessingWorker(QThread):
         self.project_manager = project_manager
         self.active_layer_name = active_layer_name
         self.viewport_snapshots = viewport_snapshots  # Phase 2+3: 多模态视口截图
+        self.canvas = canvas
+        self.mapper = mapper  # Phase 5 Block 1: 在线/离线统一匹配执行
 
     def run(self) -> None:
         try:
@@ -493,21 +599,22 @@ class AIProcessingWorker(QThread):
                 raise RuntimeError(f"本地大模型调用失败：{e}")
 
             # 尝试匹配并执行指令
-            canvas = iface.mapCanvas() if iface else None
+            canvas = self.canvas if self.canvas else None
             project = QgsProject.instance()
 
             result = mapper.match_and_execute(
                 response_text,
                 canvas=canvas,
                 project=project,
+                user_text=self.user_text,
             )
 
             # 返回一个特殊流水线，由 _execute_pipeline 处理离线响应
             return json.dumps([{
                 "skill": "_offline_response",
                 "arguments": json.dumps({
-                    "success": result["success"],
-                    "message": result["message"],
+                    "success": result.get("success", False),
+                    "message": result.get("message", ""),
                     "action": result.get("action", ""),
                 }),
                 "reasoning": f"离线模式：{result.get('action', '问答')}",
@@ -526,13 +633,23 @@ class AIProcessingWorker(QThread):
                 else:
                     raise
 
-        # ========== 纯文本路径（现有逻辑，不变） ==========
-        live_system_prompt = build_system_prompt(
-            current_layer_metadata, self.pipeline_context, self.user_text
-        )
+        # ========== 纯文本路径 — Phase 5 Block 1 改造：统一走 InstructionMapper ==========
+        if self.mapper is None:
+            raise RuntimeError(
+                "在线模式需要 InstructionMapper 实例，请在构造 AIProcessingWorker 时传入 mapper 参数"
+            )
 
+        from core.config_manager import config_manager as cm
+
+        lang = "zh"
+        try:
+            lang = cm.language
+        except Exception:
+            pass
+
+        system_prompt = self.mapper.get_system_prompt(lang)
         messages: List[Dict[str, str]] = [
-            {"role": "system", "content": live_system_prompt},
+            {"role": "system", "content": system_prompt},
         ]
 
         with _history_lock:
@@ -568,9 +685,38 @@ class AIProcessingWorker(QThread):
             raise RuntimeError(f"AI 接口连接失败：{exc.reason}") from exc
 
         try:
-            return payload["choices"][0]["message"]["content"]
+            response_text = payload["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
             raise RuntimeError(f"AI 接口返回格式异常：{payload}") from exc
+
+        # Phase 5 Block 1: 在线 LLM 输出 {action, params} JSON → 统一走 mapper
+        try:
+            from qgis.core import QgsProject
+        except ImportError:
+            QgsProject = None
+
+        canvas = self.canvas if self.canvas else None
+        project = QgsProject.instance() if QgsProject else None
+
+        result = self.mapper.match_and_execute(
+            response_text,
+            canvas=canvas,
+            project=project,
+            user_text=self.user_text,
+        )
+
+        # 返回统一格式的 _offline_response pipeline
+        return json.dumps([{
+            "skill": "_offline_response",
+            "arguments": json.dumps({
+                "success": result.get("success", False),
+                "message": result.get("message", ""),
+                "action": result.get("action", ""),
+                "output_file": result.get("output_file", ""),
+                "output_layer_name": result.get("output_layer", None).name() if result.get("output_layer") else "",
+            }),
+            "reasoning": f"在线模式：{result.get('action', '问答')}",
+        }], ensure_ascii=False)
 
     def _request_multimodal_pipeline(
         self, current_layer_metadata: List[Dict[str, Any]]
@@ -1033,7 +1179,7 @@ def build_code_generation_prompt(
         "4. result = processing.run(...)，不得修改或包装。\n"
         "5. 优先使用 active_layer 作为输入图层。\n"
         "6. 输出图层必须使用 generate_output_path('skill_prefix', active_layer.name()) 生成持久化路径。\n"
-        "   例如：generate_output_path('buffer', active_layer.name()) → output/shapefiles/buffer_20260526_093012_layerA.shp\n"
+        "   例如：generate_output_path('buffer', active_layer.name()) → user_data/exports/shapefiles/buffer_20260526_093012_layerA.shp\n"
         "   可用前缀：buffer, clip, dissolve, centroid, intersect, union, convex_hull 等。\n"
         "7. 禁止使用 'TEMPORARY_OUTPUT' 或 'memory:'——这会导致应用重启后数据丢失。\n"
         "8. 禁止调用 print、input、sys、subprocess、eval、exec、open、__import__。\n"
