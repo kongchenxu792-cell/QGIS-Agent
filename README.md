@@ -1,340 +1,132 @@
-# QGIS-Agent v2.0-offline-expanded — AI-Powered QGIS Assistant
+﻿# QGIS-Agent v2.0.0 — AI 驱动的桌面 GIS 智能助手
 
-AI 驱动桌面 GIS 应用。支持在线 API（DeepSeek/DashScope）与离线本地推理（Ollama）双模式，22 个自然语言指令覆盖 GIS 全工作流。QGIS 引擎已随包封装，**无需独立安装 QGIS**。
+> 说一句话，完成 GIS 分析。无需安装 QGIS，双击即用。
 
-> 更新日期：2026-06-16
-
----
-
-## 项目简介
-
-AIQGIS 是一款基于 QGIS 平台二次开发的 AI 助手桌面应用，让学生和 GIS 从业者能用自然语言操作 GIS——说一句话就能加载图层、设置样式、做缓冲区分析、导出属性表。无需记忆 PyQGIS API 或翻找菜单，AIQGIS 将你的意图翻译成可执行的 GIS 操作指令。
-
-这是一个**个人学习兴趣项目**，非商业产品。项目将 QGIS 引擎、AI 推理能力和可视化界面整合到一个便携包中，旨在降低 GIS 学习和日常操作的门槛。所有代码开源，欢迎交流反馈。
+[![GitHub](https://img.shields.io/badge/GitHub-QGIS--Agent-blue)](https://github.com/kongchenxu792-cell/QGIS-Agent)
 
 ---
 
-## 双模式架构
+## 快速开始
 
-AIQGIS 支持**在线模式**和**离线模式**，两者共享同一套 22 条自然语言指令规范，但底层推理引擎不同，适用场景各有侧重。
+### 5 分钟上手
 
-### 在线模式（云端推理）
+1. **下载并解压** 项目文件夹到任意位置（建议纯英文路径）
+2. **双击 `启动.bat`**，等待 QGIS 界面加载
+3. 在底部对话框中输入指令，回车执行
 
-调用云端大模型（阿里云百炼 / DashScope 的 Qwen-Plus），支持：
+**无需安装 QGIS**——QGIS 3.44 便携版已随包封装（约 2.18 GB）。
 
-- **截图多模态识别**：截取地图画面，让 AI 基于视觉理解分析地图内容
-- **复杂空间分析代码生成**：多步骤工作流（如叠置分析 + 重分类 + 专题图导出）由云端模型生成完整 PyQGIS 代码
-- **联网知识问答**：GIS 领域知识（坐标系选择、空间索引原理、投影转换等）实时查询
-- **高精度指令解析**：云端大模型在 JSON 指令生成的准确率和稳定性上优于本地小模型
+### 在线模式（推荐首次体验）
 
-**需要配置 API Key**。在 `src\core\ai_config.py` 中填写阿里云百炼 API Key。
+1. 首次启动会弹出 API Key 输入窗口
+2. 填入你的阿里云百炼 API Key（免费申请：https://bailian.aliyun.com）
+3. 保存后即可使用
 
-### 离线模式（本地推理）
+### 离线模式（数据完全本地）
 
-纯本地运行，基于 Ollama + Qwen2.5 7B，拔网线也能用。支持全部 22 条自然语言指令，覆盖：
+1. 安装 [Ollama](https://ollama.com/download/windows)
+2. 拉取模型：`ollama pull qwen2.5:7b`
+3. 在 QGIS-Agent 顶部切换到「离线模式」即可
 
-- 基础地图操作（缩放、平移、复位、导出）
-- 图层管理（加载、移除、列出、缩放至图层）
-- 坐标系设置与查询
-- 矢量编辑（开启/关闭编辑）
-- 要素操作（选择、识别、SQL 过滤）
-- 样式美化（单一/分类/分级渲染、QML 加载、标注）
-- 数据分析（属性表导出、统计、缓冲区、字段管理）
-- GIS 知识问答
-
-**无需 API Key，无需联网**。所有计算在本地完成，数据不出本机。
-
-### 双模式对比
-
-| 维度 | 在线模式 | 离线模式 |
-|------|----------|----------|
-| 推理引擎 | 阿里云百炼 DashScope (Qwen-Plus) | Ollama + Qwen2.5 7B |
-| 联网要求 | 必须联网 | 无需联网 |
-| API Key | 需要配置 | 不需要 |
-| 22 条基础指令 | 全部支持 | 全部支持 |
-| 截图多模态识别 | 支持 | 不支持（自动禁用） |
-| 复杂代码生成 | 高精度 | 中等精度，简单任务可用 |
-| 联网知识问答 | 支持 | 仅本地知识库 |
-| 在线地图底图 | 可用 | 不可用（瓦片服务需网络） |
-| 数据隐私 | 数据上传云端 | 数据完全本地 |
-| 响应速度 | 取决于网络，通常 1-3 秒 | 本地推理，首 Token 约 1.5-3 秒 |
-| 硬件要求 | 无特殊要求 | 建议 8 GB 显存/内存 |
-| 适用场景 | 日常办公、联网环境、复杂分析 | 野外作业、内网环境、数据敏感场景 |
+> 离线模式无需联网，无需 API Key，所有数据不出本机。
 
 ---
 
-## 首次使用
+## 核心能力
 
-1. **在线模式用户**：打开 `src\core\ai_config.py`，将 `API_KEY` 修改为你的阿里云百炼 API Key
-2. **离线模式用户**：无需配置 API Key，但需先完成「离线模式部署」
-3. 双击 `启动.bat` 运行
+### 日常 GIS 操作（22 条自然语言指令）
 
----
+支持中文/日文/英文三语输入，覆盖图层管理、样式设置、要素编辑、属性导出、缓冲区分析等。
 
-## 运行前提
+| 类别 | 示例指令 |
+|------|---------|
+| 图层管理 | "加载 D:\data\points.shp"、"移除学校图层"、"列出所有图层" |
+| 样式设置 | "按面积字段分级渲染"、"加载 style.qml"、"显示标注" |
+| 数据分析 | "导出属性表为 CSV"、"统计面积字段"、"创建 500 米缓冲区" |
+| 地图操作 | "放大"、"缩放到学校图层"、"导出地图为 PNG" |
+| 要素操作 | "选择面积大于 100 的要素"、"点击查询属性"、"过滤城市字段为北京" |
 
-- Windows 10/11 64-bit
-- 无需安装 QGIS（已在 `qgis-portable\` 中封装）
-- 离线模式需额外安装 Ollama（详见下方「离线模式部署」）
+### 地震灾害自动化分析（5 条专业链路）
 
----
+这是 QGIS-Agent 区别于通用 GIS 工具的核心能力——将日本内阁府防灾标准业务流自动化。
 
-## 离线模式部署
+| 分析链路 | 输入 | 输出 | 应用场景 |
+|---------|------|------|---------|
+| **空间关联** | 震度分布图 + POI 设施 | 受影响设施清单 | 震后初动——识别影响范围内的关键设施 |
+| **覆盖分析** | 避难所点位 + 行政区边界 | 覆盖率 % + 盲区地图 | 验证避难所配置是否满足防灾计划要求 |
+| **盲区分析** | 覆盖分析结果 | 未覆盖区域地图 | 定位避难所服务空白区域 |
+| **人口覆盖** | 覆盖区域 + 人口分布 | 人口覆盖 %（面积 vs 人口） | 证伪"面积可替代人口"——发现 32.7% 面积覆盖 vs 56.0% 人口覆盖 |
+| **建筑风险** | 震度分布 + 人口 + 建筑数据 | 受灾暴露人口 + 建筑风险指数 | 震度 × 人口叠置估算受灾人口规模 |
 
-### 简介
+**政策依据**：日本内阁府令和 8 年 6 月 12 日阁议决定《首都直下地震紧急对策推进基本计划》规定——都心南部直下地震想定死者最大约 1.8 万人、建筑全坏烧失约 40 万栋，今后 10 年间半减为减灾目标。本工具为该计划要求的「膨大な人的・物的被害への対応強化」提供自动化基础分析。
 
-AIQGIS 支持完全离线运行模式，使用本地 Ollama 引擎进行推理，不依赖任何云端 API，所有计算和数据处理均在本地完成。
+### 架构特色
 
-### 前提条件
-
-- 已安装 [Ollama](https://ollama.com/download/windows)（Windows 版）
-- 推荐模型：`qwen2.5:7b`（约 4.5 GB 磁盘占用）
-
-### 部署步骤
-
-**1. 安装 Ollama**
-
-从 [ollama.com](https://ollama.com/download/windows) 下载 Windows 安装包并完成安装。安装后 Ollama 会自动注册为系统服务并启动。
-
-**2. 设置模型存储路径（重要）**
-
-为避免中文路径导致的编码问题，需将模型存储路径指向纯英文目录。推荐 `D:\model`：
-
-```powershell
-# PowerShell（管理员）
-[Environment]::SetEnvironmentVariable("OLLAMA_MODELS", "D:\model", "User")
+```
+用户输入（自然语言）
+    │
+    ▼
+AI 意图识别（在线 Qwen-Plus / 离线 Qwen2.5 7B）
+    │
+    ▼
+{action, params} JSON ───→ InstructionMapper.match_and_execute()
+    │
+    ▼
+Guard 检查（CRS / 图层类型 / 参数有效性）
+    │
+    ▼
+Pipeline 确定性执行（8 步引擎 + Shapely fallback 全链路）
+    │
+    ▼
+结果输出（覆盖率 / 图层 / CSV / 可追溯日志）
 ```
 
-设置后需**重启 Ollama 服务**（或在系统托盘右键 Ollama 图标 → Quit，再重新打开）。
-
-**3. 拉取模型**
-
-```powershell
-ollama pull qwen2.5:7b
-```
-
-下载约 4.5 GB，首次拉取需要几分钟。
-
-**4. 验证模型**
-
-```powershell
-ollama run qwen2.5:7b
-```
-
-输入任意文字，确认能正常回复后输入 `/bye` 退出。
-
-**5. 启动 AIQGIS 并切换到离线模式**
-
-双击 `启动.bat` 启动 AIQGIS，在顶部模式切换栏点击「离线模式」即可。
-
-### 硬件要求
-
-| 项目 | 最低要求 | 推荐配置 |
-|------|----------|----------|
-| 显存 / 内存 | 8 GB | 16 GB |
-| 磁盘空间 | 10 GB（模型 + 项目） | 20 GB |
-| GPU | 支持 CUDA（可选） | NVIDIA RTX 3060+ |
-
-> RTX 4060 笔记本实测 `qwen2.5:7b` 显存占用约 4.7 GB，JSON 指令解析首 token 延迟约 1.5-3 秒。
-
-### 注意事项
-
-- **离线模式下以下功能不可用**：
-  - 截图分析（多模态视觉）
-  - 在线 API 设置
-  - 在线地图底图（如 Google Satellite、ESRI 等 XYZ 瓦片服务）
-- **首次加载模型有启动延时**：首次发送指令时需加载模型到内存，约 5-10 秒。
-- 模型路径 `OLLAMA_MODELS` 必须设为无中文路径（如 `D:\model`），避免编码异常。
-
----
-
-## 功能
-
-### 自然语言指令（22 个）
-
-全部支持中/日/英三语输入，基于 JSON 指令规范 + 三层容错解析。
-
-#### 基础地图操作
-
-| 指令 | 说明 |
-|------|------|
-| `zoom_in` | 放大地图 |
-| `zoom_out` | 缩小地图 |
-| `reset_view` | 重置视图为全图范围 |
-| `export_map` | 导出地图为 PNG/JPG/PDF |
-
-#### 图层管理
-
-| 指令 | 说明 |
-|------|------|
-| `load_layer` | 加载图层文件（SHP/GeoJSON/TIF/GPKG） |
-| `remove_layer` | 移除指定图层 |
-| `list_layers` | 列出当前所有图层 |
-| `zoom_to_layer` | 缩放到指定图层范围 |
-
-#### 坐标系
-
-| 指令 | 说明 |
-|------|------|
-| `set_crs` | 设置图层/项目坐标系（EPSG 代码） |
-| `show_crs` | 查看当前坐标系信息 |
-
-#### 矢量编辑
-
-| 指令 | 说明 |
-|------|------|
-| `toggle_editing` | 切换矢量图层编辑状态（开启/保存并关闭） |
-
-#### 要素操作
-
-| 指令 | 说明 |
-|------|------|
-| `select_feature` | 要素选择（点选/框选/SQL 表达式选择/清除选择） |
-| `identify_feature` | 识别要素属性（点击查询） |
-| `filter_layer` | 按 SQL 表达式过滤图层要素 |
-
-#### 样式美化
-
-| 指令 | 说明 |
-|------|------|
-| `set_layer_style` | 设置图层渲染样式（单一/分类/分级，自动适配几何类型） |
-| `load_layer_style` | 加载 QML 样式文件 |
-| `add_label` | 添加/隐藏要素文字标注 |
-
-#### 数据分析
-
-| 指令 | 说明 |
-|------|------|
-| `export_attribute` | 导出属性表为 CSV |
-| `layer_statistic` | 图层数据统计（数量/最大/最小/均值/求和） |
-| `create_buffer` | 缓冲区分析（生成新图层） |
-| `open_field_manager` | 打开字段管理器 |
-
-#### 知识问答
-
-| 指令 | 说明 |
-|------|------|
-| `answer` | GIS 知识问答（空间索引、投影、拓扑等） |
-
-### 工具栏（5 个按钮）
-
-| 按钮 | 功能 |
-|------|------|
-| 平移 | 拖拽平移地图（默认激活） |
-| 放大 | 点击或框选放大地图 |
-| 缩小 | 点击缩小地图 |
-| 选择 | 要素选择（框选 / 点选） |
-| 编辑 | 切换当前矢量图层编辑状态 |
-
-### 菜单栏
-
-**文件菜单**：新建项目 / 关闭项目 / 保存项目 / 另存为 / 导入导出（导出地图图片、导出图层、导入图层）/ 导出属性表 / 加载样式文件 / API 设置 / 退出
-
-**视图菜单**：代码预览 / 多模态截图分析 / 重置 AI 上下文 / 全图显示 / 标注开关
-
-**工具菜单**：提示词 Agent / 一键瘦身 / 字段管理器 / 要素统计 / 缓冲区分析 / 批量样式设置
-
-**帮助菜单**：查看日志 / 关于 AIQGIS
-
-### 图层树右键菜单（12 项）
-
-- 查看属性表
-- 缩放到图层
-- 开启/关闭编辑（矢量图层，状态可跟随）
-- 图层样式设置（矢量 & 栅格）
-- 显示/隐藏标注（矢量图层，状态可跟随）
-- 设置属性过滤
-- 字段管理
-- 导出属性表
-- 要素统计
-- 重命名图层
-- 复制图层
-- 移除图层
-
-### 离线模式专属特性
-
-- 红/绿状态标签指示当前模式
-- 进度条指示模型推理状态
-- 截图分析 / 多模态 / 在线 API 设置自动禁用
-- 快捷流程按钮（地籍、水文、批量裁剪、属性批量、专题图）
-
-### 一键瘦身 & 提示词 Agent
-
-- **一键瘦身**：清理项目中未使用的样式、冗余字段和临时数据
-- **提示词 Agent**：独立提示词调试与优化工具，支持多轮对话和上下文管理
-
-### 项目管理
-
-- 新建 / 打开 / 保存 / 另存 QGIS 项目（`.qgz`）
-- 导入 / 导出图层数据
-- 拖放加载图层文件
-
----
-
-## 使用场景举例
-
-- **野外无网络环境下的地块编辑**：切换到离线模式，加载无人机正射影像和地块矢量图层，用自然语言指令开启编辑、选择要素、修改属性并保存，全程无需联网
-- **课堂快速展示图层样式**：教师加载示例数据后，用 `set_layer_style` 一键切换单一符号/分类/分级渲染，即时展示不同可视化效果
-- **批量导出属性表做统计**：对多个图层依次使用 `export_attribute` 导出 CSV，再用 `layer_statistic` 快速查看各图层数值字段的统计摘要
-- **应急缓冲区分析**：加载点状灾害数据，用 `create_buffer` 在 3 秒内生成缓冲区图层并自动添加到地图，快速评估影响范围
-- **日常 GIS 学习辅助**：遇到不懂的投影参数或空间索引概念，用 `answer` 指令提问，离线模式基于本地知识库作答，在线模式可联网获取更广泛的知识
-- **数据敏感场景**：涉及隐私数据（如地籍调查、规划红线）时，使用离线模式确保数据完全不离开本机
+- **在线和离线走同一条管道**——AI 只负责理解意图和填参数，不碰实际计算
+- **CRS 自动检测和修正**——地理坐标系（度）下自动拦截，避免缓冲区算出错误结果
+- **Shapely 全链路 fallback**——QGIS 大坐标处理异常时自动降级到 Shapely 引擎
+- **Pipeline 中途失败自动回滚**——不会留下半成品中间图层
 
 ---
 
 ## 项目结构
 
 ```
-AIQGIS_APP/
-├── 启动.bat                # 启动脚本
-├── README.md
-├── aiqgis_config.json       # 用户配置（模式/语言/API 密钥）
-├── qgis-portable/           # QGIS 3.44.9 便携版（2.18 GB）
+QGIS-Agent/
+├── 启动.bat                    # 一键启动脚本
+├── 启动_静默.py                # 无控制台窗口启动（快捷方式用）
+├── qgis-portable/              # QGIS 3.44.9 便携版（~2.18 GB）
 ├── src/
-│   ├── main.py              # 程序入口，初始化 QGIS 环境和 PyQt5 主窗口
-│   ├── core/                # 核心模块
-│   │   ├── ai_config.py     # AI 端点配置（在线/离线模式切换、API Key、Base URL）
-│   │   ├── ai_worker.py     # AI 推理调度中心，管理异步请求和结果分发
-│   │   ├── config_manager.py # 配置持久化管理，读写 aiqgis_config.json
-│   │   ├── instruction_mapper.py # 多语言指令映射，将 22 个 action 映射为中/日/英指令
-│   │   ├── local_llm.py     # 本地 Ollama 推理引擎，封装 Ollama API 调用
-│   │   ├── memory_bridge.py # 上下文记忆管理，维护多轮对话历史
-│   │   └── multimodal/      # 多模态模块（截图分析、视觉理解，仅在线模式可用）
-│   ├── knowledge/           # GIS 知识库
-│   │   └── gis_reference.py # PyQGIS API 参考分片，供离线模式知识问答用
-│   ├── skills/              # Skill-based Agent 技能模块
-│   │   ├── buffer_skill.py       # 缓冲区分析技能
-│   │   ├── inspect_skill.py      # 要素识别与属性查询技能
-│   │   ├── intersect_skill.py    # 叠置分析技能
-│   │   ├── layer_control_skill.py # 图层控制技能（加载、移除、缩放）
-│   │   ├── map_export_skill.py   # 地图导出技能
-│   │   └── style_layer_skill.py  # 图层样式设置技能
-│   ├── prompt_agent/        # 提示词 Agent 工具
-│   │   ├── config.py        # Agent 配置
-│   │   ├── refiner.py       # 提示词精炼与优化
-│   │   └── widget.py        # Agent 交互界面
-│   ├── i18n/                # 国际化翻译文件
-│   │   ├── zh.json          # 中文
-│   │   ├── ja.json          # 日文
-│   │   └── en.json          # 英文
-│   └── ui/                  # PyQt5 界面层
-│       ├── main_window.py   # 主窗口（菜单栏、工具栏、图层树右键菜单、模式切换栏）
-│       └── api_config_dialog.py # API 配置对话框（在线模式）
-├── tests/                   # 单元测试
-└── temp/                    # 临时文件（运行产物）
+│   ├── main.py                 # 程序入口
+│   ├── __init__.py             # 版本号（v2.0.0）
+│   ├── core/
+│   │   ├── ai_worker.py        # AI 推理调度（在线/离线双模式 + exec 已被移除）
+│   │   ├── instruction_mapper.py # 指令映射 + 参数校验 + 图层名修正
+│   │   ├── pipeline_executor.py  # Pipeline 确定性执行引擎（6 引擎 + fallback）
+│   │   ├── guards.py           # Guard 注册表（CRS/图层类型/参数有效性 9 个守卫）
+│   │   ├── handlers_analysis.py  # 分析 Handler（覆盖/盲区/人口/建筑风险）
+│   │   ├── handlers_basic.py   # 基础 Handler（加载/导出/缓冲/空间连接等 20 个）
+│   │   ├── handlers_seismic.py # 地震 Handler（震度态势图）
+│   │   ├── template_registry.py  # Template 注册表 + 图层自动识别
+│   │   ├── templates/          # 4 个 JSON Pipeline 模板
+│   │   │   ├── coverage_analysis.json
+│   │   │   ├── gap_analysis.json
+│   │   │   ├── population_coverage.json
+│   │   │   └── building_risk.json
+│   │   ├── sandbox_worker.py   # 沙箱执行引擎（已封存，保留备审计）
+│   │   ├── fallback_utils.py   # Shapely 全链路 fallback（大坐标兜底）
+│   │   ├── qgis_env.py         # QGIS 便携环境引导
+│   │   ├── config_manager.py   # 配置持久化（aiqgis_config.json）
+│   │   ├── ai_config.py        # AI 端点配置
+│   │   ├── local_llm.py        # Ollama 推理客户端
+│   │   ├── memory_bridge.py    # 对话记忆桥接（mem0 集成）
+│   │   └── ...
+│   ├── skills/                 # Skill 系统（16 个独立技能模块）
+│   ├── prompt_agent/           # 提示词调试工具
+│   ├── i18n/                   # 中/日/英三语（各 219 键）
+│   └── ui/                     # PyQt5 界面层
+├── tests/                      # 88 个单元测试
+└── docs/                       # 文档和变更日志
 ```
-
-### 模块职责速览
-
-| 模块 | 职责 |
-|------|------|
-| `src/core/` | AI 推理调度、配置管理、指令映射、本地 LLM 引擎、多模态 |
-| `src/skills/` | 将 22 个自然语言指令映射为具体 PyQGIS 操作 |
-| `src/prompt_agent/` | 独立提示词调试与优化工具，支持上下文管理和多轮迭代 |
-| `src/i18n/` | 中/日/英三语完整翻译，覆盖所有 UI 文本和指令 |
-| `src/ui/` | PyQt5 主界面、菜单栏、工具栏、右键菜单、对话框 |
-| `src/knowledge/` | 离线模式下的 GIS 知识库，PyQGIS API 参考 |
-| `qgis-portable/` | 封装的 QGIS 3.44.9 便携版，包含所有 GIS 运行时依赖 |
 
 ---
 
@@ -342,35 +134,47 @@ AIQGIS_APP/
 
 | 层级 | 技术 |
 |------|------|
-| 语言 | Python 3.x |
-| GUI 框架 | PyQt5 |
-| GIS 引擎 | QGIS Python API (PyQGIS 3.44) |
-| 在线推理 | OpenAI 兼容 API（DeepSeek / DashScope Qwen-Plus） |
-| 离线推理 | Ollama 本地引擎 + Qwen2.5/Qwen3 7B |
-| 指令解析 | JSON 指令规范 + 三层容错（模板匹配 → 正则提取 → 原始 JSON） |
-| 国际化 | 中 / 日 / 英三语完整支持 |
+| GUI | PyQt5 |
+| GIS 引擎 | QGIS 3.44 (PyQGIS) |
+| 几何计算 | Shapely 2.x（全链路 fallback） |
+| 在线 AI | 阿里云 DashScope Qwen-Plus |
+| 离线 AI | Ollama + Qwen2.5:7B |
+| 指令解析 | JSON 模板匹配 + keyword 纠偏 + 三层容错 |
+| 国际化 | 中文 / 日文 / English（219 键完全对齐） |
+| 测试 | pytest（88 用例，0.45s 全量通过） |
 
 ---
 
-## 项目声明
+## 测试
 
-本项目为**个人学习作品**，基于 QGIS 平台二次开发，非商业产品，不代表 QGIS 官方立场。
+```batch
+# 一键运行全部测试（需要 portable QGIS 环境）
+tests\run_tests.bat -v
 
-欢迎大家在 GitHub 提交 Issue 或参与 Discussion 交流使用心得和改进建议。如果你对这个项目感兴趣，或者它帮助到了你的学习和工作，请给个 Star。
-
-- 联系方式：kongchenxu792@gmail.com
-- 项目仓库：[GitHub Issues](https://github.com/kongchenxu/AIQGIS/issues)
+# 预期输出：88 passed in 0.45s
+```
 
 ---
 
-## 许可证与致谢
+## 注意事项
 
-本项目采用 [MIT License](https://opensource.org/licenses/MIT) 开源。
+- **仅支持 Windows 10/11 64-bit**
+- **不建议放在中文路径下**（可能导致 PROJ/GDAL 初始化失败）
+- 离线模式需 8 GB 以上内存/显存
+- 在线模式首次启动会提示配置 API Key
 
-特别感谢以下项目和社区：
+---
 
-- **[QGIS](https://qgis.org/)**：提供强大的开源 GIS 平台和 Python API
-- **[Ollama](https://ollama.com/)**：让本地大模型部署变得极其简单
-- **[Qwen](https://github.com/QwenLM/Qwen)**：通义千问开源模型，离线模式的核心推理引擎
-- **[阿里云百炼](https://bailian.aliyun.com/)**：在线模式的云端 AI 能力支撑
+## 许可证
 
+本项目采用 [MIT License](https://opensource.org/licenses/MIT)。
+
+致谢：[QGIS](https://qgis.org/) · [Ollama](https://ollama.com/) · [Qwen](https://github.com/QwenLM/Qwen) · [阿里云百炼](https://bailian.aliyun.com/) · [Shapely](https://shapely.readthedocs.io/)
+
+---
+
+## 联系方式
+
+- **作者**：kongchenxu792
+- **邮箱**：kongchenxu792@gmail.com
+- **仓库**：[github.com/kongchenxu792-cell/QGIS-Agent](https://github.com/kongchenxu792-cell/QGIS-Agent)
