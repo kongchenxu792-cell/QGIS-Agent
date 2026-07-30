@@ -6,6 +6,14 @@
 
 ---
 
+
+> ⚠️ **重要提示**：本仓库仅托管源代码（~2 MB）。QGIS 便携引擎（qgis-portable/，约 2.18 GB）因体积限制不在 GitHub 版本库中。
+> 
+> **如何获取完整可运行版本**：
+> - 如果你已有一个能跑的 QGIS-Agent 文件夹，直接复制整份即可（含 qgis-portable/）
+> - 否则从 Release 页面下载完整打包版本
+> - 请勿将项目放在中文或含空格的路径下（如「新建文件夹 (17)」），会导致 PROJ/GDAL 初始化失败
+
 ## 快速开始
 
 ### 5 分钟上手
@@ -178,3 +186,4 @@ tests\run_tests.bat -v
 - **作者**：kongchenxu792
 - **邮箱**：kongchenxu792@gmail.com
 - **仓库**：[github.com/kongchenxu792-cell/QGIS-Agent](https://github.com/kongchenxu792-cell/QGIS-Agent)
+
