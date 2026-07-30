@@ -1,4 +1,4 @@
-"""
+﻿"""
 QGIS-Agent 桌面快捷方式安装脚本
 创建桌面"QGIS-Agent"快捷方式，指向 pythonw.exe + 启动.bat，使用 aiqgis.ico 图标。
 win32com 优先，PowerShell fallback。
@@ -7,7 +7,7 @@ win32com 优先，PowerShell fallback。
 import os
 import sys
 
-PROJECT_ROOT = r"D:\桌面\AIQGIS_APP"
+PROJECT_ROOT = r"D:\桌面\QGIS-Agent"
 LAUNCH_BAT = os.path.join(PROJECT_ROOT, "启动_静默.py")
 PYTHONW = os.path.join(PROJECT_ROOT, r"qgis-portable\apps\Python312\pythonw.exe")
 ICON = os.path.join(PROJECT_ROOT, "resources", "aiqgis.ico")
@@ -119,3 +119,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
