@@ -1,6 +1,6 @@
 """
-AIQGIS 桌面快捷方式安装脚本
-创建桌面"AIQGIS"快捷方式，指向 pythonw.exe + 启动.bat，使用 aiqgis.ico 图标。
+QGIS-Agent 桌面快捷方式安装脚本
+创建桌面"QGIS-Agent"快捷方式，指向 pythonw.exe + 启动.bat，使用 aiqgis.ico 图标。
 win32com 优先，PowerShell fallback。
 """
 
@@ -12,7 +12,7 @@ LAUNCH_BAT = os.path.join(PROJECT_ROOT, "启动_静默.py")
 PYTHONW = os.path.join(PROJECT_ROOT, r"qgis-portable\apps\Python312\pythonw.exe")
 ICON = os.path.join(PROJECT_ROOT, "resources", "aiqgis.ico")
 DESKTOP = os.path.join(os.environ["USERPROFILE"], "Desktop")
-LNK_NAME = "AIQGIS.lnk"
+LNK_NAME = "QGIS-Agent.lnk"
 LNK_PATH = os.path.join(DESKTOP, LNK_NAME)
 
 
@@ -48,7 +48,7 @@ def create_via_win32com():
     shortcut.Arguments = f'"{LAUNCH_BAT}"'
     shortcut.WorkingDirectory = PROJECT_ROOT
     shortcut.IconLocation = ICON
-    shortcut.Description = "AIQGIS — 智能 QGIS 助手"
+    shortcut.Description = "QGIS-Agent — GIS 智能助手"
     shortcut.Save()
 
     print(f"[win32com] 快捷方式已创建: {LNK_PATH}")
@@ -66,7 +66,7 @@ $Shortcut.TargetPath = "{PYTHONW}"
 $Shortcut.Arguments = '"{LAUNCH_BAT}"'
 $Shortcut.WorkingDirectory = "{PROJECT_ROOT}"
 $Shortcut.IconLocation = "{ICON}"
-$Shortcut.Description = "AIQGIS — 智能 QGIS 助手"
+$Shortcut.Description = "QGIS-Agent — GIS 智能助手"
 $Shortcut.Save()
 "OK"
 '''
@@ -96,7 +96,7 @@ $Shortcut.Save()
 
 def main():
     print("=" * 50)
-    print("  AIQGIS 桌面快捷方式安装")
+    print("  QGIS-Agent 桌面快捷方式安装")
     print("=" * 50)
 
     check_prerequisites()
@@ -109,7 +109,7 @@ def main():
 
     if success:
         print()
-        print("安装完成。桌面上已生成「AIQGIS」快捷方式。")
+        print("安装完成。桌面上已生成「QGIS-Agent」快捷方式。")
         print(f"  图标文件: {ICON}")
     else:
         print()

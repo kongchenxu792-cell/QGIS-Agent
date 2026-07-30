@@ -1,4 +1,4 @@
-# AIQGIS v2.0-offline-expanded — AI-Powered QGIS Assistant
+# QGIS-Agent v2.0-offline-expanded — AI-Powered QGIS Assistant
 
 AI 驱动桌面 GIS 应用。支持在线 API（DeepSeek/DashScope）与离线本地推理（Ollama）双模式，22 个自然语言指令覆盖 GIS 全工作流。QGIS 引擎已随包封装，**无需独立安装 QGIS**。
 

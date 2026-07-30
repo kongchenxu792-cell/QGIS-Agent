@@ -22,7 +22,7 @@ set PATH=%OSGEO4W_ROOT%\apps\Qt5\bin;%OSGEO4W_ROOT%\bin;%OSGEO4W_ROOT%\apps\Pyth
 set PYTHONPATH=%OSGEO4W_ROOT%\apps\qgis-ltr\python;%OSGEO4W_ROOT%\apps\Python312\Lib\site-packages
 
 echo ========================================
-echo   AIQGIS v0.4 Portable
+echo QGIS-Agent v2.0.0 Portable
 echo ========================================
 
 "%OSGEO4W_ROOT%\apps\Python312\python.exe" "%~dp0src\main.py"
