@@ -7,13 +7,54 @@
 ---
 
 
-> ⚠️ **重要提示**：本仓库仅托管源代码（~2 MB）。QGIS 便携引擎（qgis-portable/，约 2.18 GB）因体积限制不在 GitHub 版本库中。
-> 
-> **如何获取完整可运行版本**：
-> - 如果你已有一个能跑的 QGIS-Agent 文件夹，直接复制整份即可（含 qgis-portable/）
-> - 否则从 Release 页面下载完整打包版本
-> - 请勿将项目放在中文或含空格的路径下（如「新建文件夹 (17)」），会导致 PROJ/GDAL 初始化失败
 
+## ⚠️ 重要：GitHub 仓库不含 QGIS 引擎
+
+本仓库仅托管源代码（约 2 MB）。QGIS 便携引擎（`qgis-portable/`，约 2.18 GB）因体积超过 GitHub 单文件限制被排除在版本库外。**直接 `git clone` 后双击 `启动.bat` 会报错**——缺的不是代码，是 QGIS 运行环境。
+
+### 如何获得完整可运行版本
+
+**方式一：从已有环境直接复制（最快）**
+
+如果你已经在某台电脑上成功运行过 QGIS-Agent，直接把整个项目文件夹复制到目标电脑即可。`qgis-portable/` 是绿色版，不依赖注册表。
+
+**方式二：手动组装（适合全新环境，约 15 分钟）**
+
+1. `git clone https://github.com/kongchenxu792-cell/QGIS-Agent.git`
+2. 下载 [QGIS 3.44 Portable](https://qgis.org/download/) 并解压
+3. 将解压后的 QGIS 文件夹重命名为 `qgis-portable`，放在项目根目录
+4. 目录结构应为：
+   ```
+   QGIS-Agent/
+   ├── 启动.bat
+   ├── src/
+   └── qgis-portable/       ← 从这里放进去
+       ├── bin/
+       ├── apps/
+       │   ├── qgis-ltr/
+       │   ├── Qt5/
+       │   └── Python312/
+       └── share/
+   ```
+5. 双击 `启动.bat`，应能看到 QGIS 界面启动
+
+**方式三：Release 打包版（推荐）**
+
+在 [Releases](https://github.com/kongchenxu792-cell/QGIS-Agent/releases) 页面下载完整打包版本，解压即用。
+
+### 路径注意事项
+
+| 路径示例 | 是否可用 | 原因 |
+|----------|---------|------|
+| `D:\QGIS-Agent` | ✅ 可用 | 纯英文，无空格 |
+| `C:\Users\用户名\桌面\QGIS-Agent` | ✅ 可用 | 中文用户名不影响 |
+| `D:\新建文件夹 (17)\QGIS-Agent` | ❌ 不可用 | 中文路径 + 括号 → PROJ/GDAL 初始化失败 |
+| `D:\My Projects\QGIS-Agent` | ❌ 不可用 | 空格路径 → Python DLL 加载可能失败 |
+
+**如果出现 `ImportError: DLL load failed`**，说明路径有问题或有多个 Python 版本冲突。检查：
+- 项目路径是否含中文或空格
+- 本机是否同时安装了系统版 QGIS 或独立 Python（会与便携版冲突）
+- 是否缺少 [VC++ Redistributable 2015-2022](https://aka.ms/vs/17/release/vc_redist.x64.exe)
 ## 快速开始
 
 ### 5 分钟上手
@@ -186,4 +227,5 @@ tests\run_tests.bat -v
 - **作者**：kongchenxu792
 - **邮箱**：kongchenxu792@gmail.com
 - **仓库**：[github.com/kongchenxu792-cell/QGIS-Agent](https://github.com/kongchenxu792-cell/QGIS-Agent)
+
 
