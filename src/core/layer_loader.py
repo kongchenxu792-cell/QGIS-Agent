@@ -1,7 +1,7 @@
 """矢量图层与栅格图层的拖放加载辅助工具。
 
-提供文件类型判断、图层对象创建和批量加载功能，支持 SHP、GeoJSON、
-GPKG、KML、GeoTIFF 等常见 GIS 数据格式。
+策略对齐 QGIS 原生拖放：不依赖扩展名白名单，直接委托 GDAL/OGR 驱动尝试打开。
+QGIS 能打开的数据格式，AIQGIS 画布同样支持。
 """
 
 from __future__ import annotations
@@ -9,46 +9,22 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Iterable, List, Tuple
 
+from osgeo import gdal
 from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer
 
 
-#: 支持的矢量数据文件扩展名集合。
-VECTOR_EXTENSIONS = {
-    ".shp",
-    ".geojson",
-    ".json",
-    ".gpkg",
-    ".kml",
-    ".gml",
-}
-
-#: 支持的栅格数据文件扩展名集合。
-RASTER_EXTENSIONS = {
-    ".tif",
-    ".tiff",
-    ".img",
-    ".vrt",
-    ".jpg",
-    ".jpeg",
-    ".png",
-}
-
-#: 支持的表格数据文件扩展名集合（Excel/CSV）。
-TABLE_EXTENSIONS = {
-    ".xlsx",
-    ".xls",
-    ".csv",
-}
-
-#: QGIS 项目文件扩展名集合。
+#: QGIS 项目文件扩展名集合（需特殊处理：调用 QgsProject.read）。
 PROJECT_EXTENSIONS = {".qgz", ".qgs"}
 
-#: 所有支持拖放加载的扩展名并集。
-ALL_SUPPORTED_EXTENSIONS = VECTOR_EXTENSIONS | RASTER_EXTENSIONS | TABLE_EXTENSIONS | PROJECT_EXTENSIONS
+#: 表格数据文件扩展名集合（Excel/CSV — 非 GIS 图层，走独立加载路径）。
+TABLE_EXTENSIONS = {".xlsx", ".xls", ".csv"}
 
 
 def is_supported_path(file_path: str) -> bool:
-    """判断给定文件路径是否为可拖放加载的 GIS 数据或项目格式。
+    """判断给定文件路径是否可尝试加载。
+
+    不再依赖硬编码扩展名白名单。只要文件存在且非系统隐藏文件，
+    即可交给 GDAL/OGR 尝试打开。
 
     参数
     ----
@@ -58,10 +34,16 @@ def is_supported_path(file_path: str) -> bool:
     返回
     ----
     bool
-        若文件扩展名在支持的格式范围内则返回 ``True``。
+        若文件存在且非系统文件则返回 ``True``。
     """
 
-    return Path(file_path).suffix.lower() in ALL_SUPPORTED_EXTENSIONS
+    path = Path(file_path)
+    if not path.exists():
+        return False
+    # 跳过明显的非数据文件（系统文件、快捷方式等）
+    if path.suffix.lower() in {".lnk", ".exe", ".dll", ".sys", ".bat", ".cmd"}:
+        return False
+    return True
 
 
 def is_table_path(file_path: str) -> bool:
@@ -84,7 +66,8 @@ def is_table_path(file_path: str) -> bool:
 def create_layer_from_path(file_path: str):
     """从本地文件路径创建 QGIS 图层对象。
 
-    根据文件扩展名自动判断图层类型（矢量或栅格）。
+    策略与 QGIS 原生拖放对齐：先尝试 OGR 矢量驱动，失败则回退 GDAL 栅格驱动。
+    不依赖扩展名白名单 — 让 GDAL/OGR 自己判断能否识别该格式。
 
     参数
     ----
@@ -99,24 +82,36 @@ def create_layer_from_path(file_path: str):
     异常
     ----
     ValueError
-        若文件类型不受支持或图层加载失败时抛出。
+        若 OGR 和 GDAL 均无法识别该文件时抛出。
     """
 
     path = Path(file_path)
-    extension = path.suffix.lower()
     layer_name = path.stem
+    path_str = str(path)
 
-    if extension in VECTOR_EXTENSIONS:
-        layer = QgsVectorLayer(str(path), layer_name, "ogr")
-    elif extension in RASTER_EXTENSIONS:
-        layer = QgsRasterLayer(str(path), layer_name)
-    else:
-        raise ValueError(f"暂不支持该文件类型：{path.suffix}")
+    # 启用 SHAPE_RESTORE_SHX：当 .shx 文件缺失时，GDAL 可从 .shp 自动恢复
+    gdal.SetConfigOption("SHAPE_RESTORE_SHX", "YES")
 
-    if not layer.isValid():
-        raise ValueError(f"无法加载图层文件：{path}")
+    # 先尝试 OGR 矢量驱动（覆盖 SHP/GPKG/GeoJSON/KML/GML/TAB/MIF/DXF/VRT/...）
+    vector_layer = QgsVectorLayer(path_str, layer_name, "ogr")
+    if vector_layer.isValid():
+        return vector_layer
 
-    return layer
+    # 回退 GDAL 栅格驱动（覆盖 GeoTIFF/IMG/JPEG/PNG/GDAL VRT/...）
+    raster_layer = QgsRasterLayer(path_str, layer_name)
+    if raster_layer.isValid():
+        return raster_layer
+
+    # 收集 GDAL/OGR 实际错误信息
+    detail_parts = []
+    vec_err = vector_layer.dataProvider().error().message() if vector_layer.dataProvider() else ""
+    if vec_err:
+        detail_parts.append(f"OGR: {vec_err}")
+    ras_err = raster_layer.dataProvider().error().message() if raster_layer.dataProvider() else ""
+    if ras_err:
+        detail_parts.append(f"GDAL: {ras_err}")
+    detail = "；".join(detail_parts) if detail_parts else "OGR 和 GDAL 均无法识别"
+    raise ValueError(f"无法加载图层文件：{path}（{detail}）")
 
 
 def load_layers_from_paths(file_paths: Iterable[str]) -> Tuple[List[object], List[str]]:

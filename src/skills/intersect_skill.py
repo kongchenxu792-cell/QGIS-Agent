@@ -2,7 +2,7 @@
 相交技能 — 封装 QGIS native:intersection 算法。
 
 计算两个矢量图层之间的几何交集，保留两个图层的属性字段。
-结果持久化到 output/shapefiles/，应用重启后数据不丢失。
+结果持久化到 user_data/exports/shapefiles/，应用重启后数据不丢失。
 
 参数格式（arguments 字符串）：
   - JSON: {"input_layer": "roads", "overlay_layer": "boundary"}

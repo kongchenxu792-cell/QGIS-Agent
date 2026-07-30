@@ -2,7 +2,7 @@
 缓冲技能 — 封装 QGIS native:buffer 算法。
 
 对输入矢量图层生成指定距离的缓冲区多边形。
-结果持久化到 output/shapefiles/，应用重启后数据不丢失。
+结果持久化到 user_data/exports/shapefiles/，应用重启后数据不丢失。
 
 参数格式（arguments 字符串）：
   - JSON: {"input_layer": "roads", "distance": 100.0, "segments": 8}

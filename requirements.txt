@@ -1,7 +1,5 @@
 # 本项目使用本机 QGIS 3.44.9 自带的 PyQt5 / PyQGIS 运行时。
 # 如需单独安装第三方依赖，可在后续步骤继续补充。
 
-# Phase 7: 记忆层 — mem0 向量存储 + 语义检索（完全离线）
-mem0ai>=1.0.0
-fastembed>=0.4.0
-qdrant-client>=1.9.0
+# Phase 7: 记忆层依赖（mem0ai / fastembed / qdrant-client）已移至 optional-requirements.txt
+# 详见该文件的风险说明。

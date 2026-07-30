@@ -113,7 +113,7 @@ class AiCodePreviewDialog(QDialog):
 
         self.execute_btn = QPushButton("确认执行")
         self.execute_btn.setDefault(True)
-        self.execute_btn.setStyleSheet("background: #1976d2; color: white;")
+        self.execute_btn.setStyleSheet("background: #10b981; color: white;")
         self.execute_btn.clicked.connect(self._confirm_execute)
         button_layout.addWidget(self.execute_btn)
 

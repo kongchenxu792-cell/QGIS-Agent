@@ -2,7 +2,7 @@
 质心提取技能 — 封装 QGIS native:centroids 算法。
 
 计算面图层每个要素的几何中心点，生成新的点图层。
-结果持久化到 output/shapefiles/，应用重启后数据不丢失。
+结果持久化到 user_data/exports/shapefiles/，应用重启后数据不丢失。
 """
 
 import os

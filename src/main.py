@@ -10,19 +10,31 @@ import os
 import sys
 import traceback
 
+# ── 将项目根目录注入 sys.path，确保 'from src.xxx' 绝对导入可行 ──
+# 约束：realpath 归一化、幂等只插一次、不覆盖 QGIS 自带路径
+_project_root = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+
 # ── PROJ 环境硬编码激活：基于 QGIS portable 标准布局，不再动态巡检 ──
 # 必须在任何 GIS/GDAL 导入前设置 PROJ_LIB/PROJ_DATA，否则 GDAL 初始化会缓存空路径。
-_app_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "qgis-portable")
+_app_path = os.path.join(_project_root, "qgis-portable")
 _proj_path = os.path.join(_app_path, "share", "proj")
 os.environ.setdefault("PROJ_LIB", _proj_path)      # 旧版 PROJ (<9.x)
 os.environ.setdefault("PROJ_DATA", _proj_path)     # 新版 PROJ (9.x+)
 
 from core.logger import init_logging
-from core.qgis_env import bootstrap_qgis, initialize_processing, shutdown_qgis
+from core.qgis_env import bootstrap_qgis, initialize_processing, shutdown_qgis, _to_short_path
 
 init_logging()
 _log = logging.getLogger("main")
 
+# ── API Key 明文存储检查 ──
+from core.config_manager import config_manager
+_api_key = config_manager.api_key
+_placeholder_keys = {"your-api-key-here", "sk-placeholder", "YOUR_API_KEY_HERE", ""}
+if _api_key and _api_key not in _placeholder_keys:
+    _log.warning("⚠️ API Key 以明文存储于 aiqgis_config.json，请注意安全")
 
 def run() -> int:
     """启动 GUI 应用程序并返回进程退出码。"""
@@ -92,7 +104,15 @@ def run() -> int:
         return 1
     finally:
         if qgs_app is not None:
-            qgs_app.exitQgis()
+            # 抑制 exitQgis() 阶段的 PROJ: Cannot find proj.db 无害告警
+            _stderr_fd = sys.stderr.fileno()
+            _saved_stderr = os.dup(_stderr_fd)
+            try:
+                os.dup2(os.open(os.devnull, os.O_WRONLY), _stderr_fd)
+                qgs_app.exitQgis()
+            finally:
+                os.dup2(_saved_stderr, _stderr_fd)
+                os.close(_saved_stderr)
         shutdown_qgis()
 
 

@@ -1,0 +1,182 @@
+{
+  "action": "population_coverage",
+  "zh_triggers": ["人口覆盖", "人口覆盖率", "人口カバー率", "人口覆盖分析"],
+  "ja_triggers": ["人口カバー率", "ポピュレーションカバレッジ", "人口カバー", "人口カバー分析"],
+  "en_triggers": ["population coverage", "population coverage rate", "population coverage analysis"],
+  "output_base": "user_data/exports/shapefiles/",
+  "params": [
+    {
+      "name": "source_layer",
+      "type": "layer",
+      "role": "source",
+      "required": true,
+      "comment": "源点图层（如避难所），自动从已加载图层匹配"
+    },
+    {
+      "name": "boundary_layer",
+      "type": "layer",
+      "role": "boundary",
+      "required": true,
+      "comment": "边界面图层（如行政区划）"
+    },
+    {
+      "name": "population_layer",
+      "type": "layer",
+      "role": "population",
+      "required": true,
+      "comment": "人口矢量面图层（含人口属性字段）"
+    },
+    {
+      "name": "population_field",
+      "type": "string",
+      "role": "field",
+      "required": true,
+      "comment": "人口图层的属性字段名（如 population / POP2020）"
+    },
+    {
+      "name": "radius_m",
+      "type": "float",
+      "default": 500.0,
+      "comment": "缓冲区半径（米）"
+    }
+  ],
+  "guards": [
+    {"condition": "crs_projected"},
+    {"condition": "source_is_vector"},
+    {"condition": "source_is_point", "params": {"geometry_type": 0}},
+    {"condition": "boundary_is_polygon", "params": {"geometry_type": 2}},
+    {"condition": "population_is_polygon", "params": {}},
+    {"condition": "boundary_fc_limit", "params": {"max": 10000}},
+    {"condition": "shapely_available"},
+    {"condition": "crs_match", "params": {"auto_reproject": true}}
+  ],
+  "steps": [
+    {
+      "id": "boundary_dissolve",
+      "input_source": "$boundary_layer",
+      "params": {
+        "FIELD": [],
+        "OUTPUT": "memory:"
+      },
+      "engine": {
+        "primary": {"name": "qgis_processing", "algorithm": "native:dissolve"}
+      },
+      "log": "[POP_COV] 溶解边界图层: {fc} 要素",
+      "comment": "将边界多面合并为单一多边形"
+    },
+    {
+      "id": "boundary_buffer",
+      "input_source": "$boundary_dissolve.output",
+      "params": {
+        "DISTANCE": "$radius_m",
+        "SEGMENTS": 5,
+        "OUTPUT": "memory:"
+      },
+      "engine": {
+        "primary": {"name": "qgis_processing", "algorithm": "native:buffer"}
+      },
+      "log": "[POP_COV] 边界缓冲区: radius={radius}m",
+      "comment": "边界外扩一个半径，用于空间粗筛扩大范围"
+    },
+    {
+      "id": "spatial_filter",
+      "input_source": "$source_layer",
+      "input_boundary": "$boundary_buffer.output",
+      "params": {
+        "buffer_radius": "$radius_m",
+        "max_features": 10000
+      },
+      "engine": {
+        "primary": {"name": "qgis_spatial_index"}
+      },
+      "log": "[POP_COV] 空间筛选完成: candidates={candidates} selected={selected}",
+      "comment": "用 QgsSpatialIndex 粗筛 + QgsGeometry.intersects 精筛"
+    },
+    {
+      "id": "buffer",
+      "input_source": "$spatial_filter.output",
+      "params": {
+        "DISTANCE": "$radius_m",
+        "SEGMENTS": 5,
+        "OUTPUT": "memory:"
+      },
+      "engine": {
+        "primary": {"name": "qgis_processing", "algorithm": "native:buffer", "validate": "fc > 0"},
+        "fallback": [
+          {"name": "shapely", "method": "buffer", "validate": "fc > 0"}
+        ]
+      },
+      "log": "[POP_COV] 缓冲区: radius={radius}m, fc={fc}",
+      "comment": "对筛选后的点做缓冲区"
+    },
+    {
+      "id": "dissolve",
+      "input_source": "$buffer.output",
+      "params": {
+        "FIELD": [],
+        "OUTPUT": "memory:"
+      },
+      "engine": {
+        "primary": {"name": "qgis_processing", "algorithm": "native:dissolve", "validate": "fc > 0"},
+        "fallback": [
+          {"name": "shapely", "method": "union", "validate": "fc > 0 && area > 0"}
+        ]
+      },
+      "log": "[POP_COV] 溶解完成: fc={fc}",
+      "comment": "合并所有缓冲区圆为单个多边形"
+    },
+    {
+      "id": "clip",
+      "input_source": "$dissolve.output",
+      "input_boundary": "$boundary_dissolve.output",
+      "params": {
+        "OUTPUT": "memory:"
+      },
+      "engine": {
+        "primary": {"name": "qgis_processing", "algorithm": "native:clip", "validate": "fc > 0 && t > 0.1s"},
+        "fallback": [
+          {"name": "qgis_processing", "algorithm": "native:intersection", "validate": "fc > 0 && t > 0.1s"},
+          {"name": "shapely_wkt", "method": "intersection", "validate": "not is_empty && area > 0"}
+        ]
+      },
+      "log": "[POP_COV] 裁剪完成: fc={fc}, covered_area={covered_area:.0f} m²",
+      "comment": "合并的缓冲区与边界求交集 = 覆盖区域。三级 fallback"
+    },
+    {
+      "id": "pop_intersect",
+      "input_source": "$clip.output",
+      "input_boundary": "$population_layer",
+      "params": {},
+      "engine": {
+        "primary": {"name": "shapely_wkt", "method": "pop_intersect", "validate": "fc > 0"}
+      },
+      "log": "[POP_COV] 人口交集完成: fc={fc}, total_pop={total_population}",
+      "comment": "覆盖区域与人口图层求交集，输出 GeoJSON 含 population_field + zone_area 属性"
+    },
+    {
+      "id": "stats",
+      "input_source": "$pop_intersect.output",
+      "input_boundary": "$boundary_dissolve.output",
+      "engine": {
+        "primary": {"name": "shapely", "method": "area", "validate": "total_area > 0"}
+      },
+      "output_keys": ["source_count", "radius_m", "total_area", "covered_area", "coverage_rate", "total_population", "covered_population", "pop_coverage_rate"],
+      "log": "[POP_COV] 人口覆盖率: {pop_coverage_rate:.1f}% (覆盖人口={covered_population:.0f} / 总人口={total_population:.0f}), 面积覆盖率={coverage_rate:.1f}%",
+      "comment": "面积 + 人口双重统计。人口加权：zone_covered_pop = pop × (intersect_area / zone_area)"
+    },
+    {
+      "id": "output_layer",
+      "input_source": "$pop_intersect.output",
+      "params": {
+        "name_template": "{source_name}_pop_coverage_{radius_m}m",
+        "add_to_project": true,
+        "zoom_to_layer": true
+      },
+      "engine": {
+        "primary": {"name": "geojson_file", "path_template": "{output_dir}/{source_name}_pop_coverage_{radius_m}m.geojson", "validate": "not is_empty"}
+      },
+      "log": "[POP_COV] 输出图层: {layer_name} ({fc} 要素)",
+      "comment": "输出人口覆盖交集图层到画布，复用 pop_intersect 的 GeoJSON"
+    }
+  ]
+}

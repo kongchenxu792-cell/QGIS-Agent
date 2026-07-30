@@ -1,0 +1,105 @@
+{
+  "action": "building_risk_analysis",
+  "zh_triggers": ["建筑倒塌风险", "震度人口风险", "受灾人口估算", "建筑风险分析"],
+  "ja_triggers": ["建物倒壊リスク", "震度人口リスク", "被災人口推定", "建物リスク分析"],
+  "en_triggers": ["building collapse risk", "seismic population risk", "exposed population estimation", "building risk analysis"],
+  "output_base": "user_data/exports/shapefiles/",
+  "params": [
+    {
+      "name": "intensity_layer",
+      "type": "layer",
+      "role": "intensity",
+      "required": true,
+      "comment": "震度分布面图层（含 T30_I50_PS 等震度概率字段）"
+    },
+    {
+      "name": "population_layer",
+      "type": "layer",
+      "role": "population",
+      "required": true,
+      "comment": "人口矢量面图层（含人口属性字段）"
+    },
+    {
+      "name": "population_field",
+      "type": "string",
+      "role": "field",
+      "required": true,
+      "comment": "人口图层的属性字段名（如 population / POP2020）"
+    },
+    {
+      "name": "intensity_field",
+      "type": "string",
+      "role": "field",
+      "required": false,
+      "comment": "震度图层的震度概率字段名（如 T30_I50_PS）。留空时自动检测第一个匹配 T\\d+_I\\d+ 的字段"
+    },
+    {
+      "name": "boundary_layer",
+      "type": "layer",
+      "role": "boundary",
+      "required": false,
+      "comment": "行政区边界图层（可选，用于裁剪到想定区划内）"
+    }
+  ],
+  "guards": [
+    {"condition": "crs_projected"},
+    {"condition": "intensity_is_polygon"},
+    {"condition": "population_is_polygon"},
+    {"condition": "shapely_available"},
+    {"condition": "crs_match", "params": {"auto_reproject": true}}
+  ],
+  "steps": [
+    {
+      "id": "intensity_clip",
+      "input_source": "$intensity_layer",
+      "input_boundary": "$boundary_layer",
+      "params": {
+        "OUTPUT": "memory:"
+      },
+      "engine": {
+        "primary": {"name": "qgis_processing", "algorithm": "native:clip", "validate": "fc > 0 && t > 0.1s"},
+        "fallback": [
+          {"name": "shapely_wkt", "method": "intersection", "validate": "not is_empty && area > 0"}
+        ]
+      },
+      "log": "[BUILDING_RISK] 震度图层裁剪完成: fc={fc}",
+      "comment": "可选步骤：用边界裁剪震度图层到想定区划内",
+      "skip_if": "!boundary_layer"
+    },
+    {
+      "id": "pop_intersect",
+      "input_source": "$intensity_layer",
+      "input_boundary": "$population_layer",
+      "params": {},
+      "engine": {
+        "primary": {"name": "shapely_wkt", "method": "pop_intersect", "validate": "fc > 0"}
+      },
+      "log": "[BUILDING_RISK] 震度-人口交集完成: fc={fc}",
+      "comment": "震度图层与人口图层求交集，输出 GeoJSON 含 population / zone_area / intensity_probability 属性"
+    },
+    {
+      "id": "stats",
+      "input_source": "$pop_intersect.output",
+      "engine": {
+        "primary": {"name": "shapely", "method": "area", "validate": "total_population > 0"}
+      },
+      "output_keys": ["total_population", "total_exposed_population", "high_risk_population", "building_risk_index"],
+      "log": "[BUILDING_RISK] 风险统计: 总受灾人口={total_exposed_population:.0f}, 高风险人口={high_risk_population:.0f}, 建筑风险指数={building_risk_index:.1f}",
+      "comment": "面积加权统计：总受灾人口 = Σ(人口 × 面积比例 × 震度概率); 高风险人口 = Σ(人口 × 面积比例) where 震度概率 > 0.9; 建筑风险指数 = 加权平均震度概率 × 100"
+    },
+    {
+      "id": "output_layer",
+      "input_source": "$pop_intersect.output",
+      "params": {
+        "name_template": "{intensity_layer_name}_building_risk",
+        "add_to_project": true,
+        "zoom_to_layer": true
+      },
+      "engine": {
+        "primary": {"name": "geojson_file", "path_template": "{output_dir}/{intensity_layer_name}_building_risk.geojson", "validate": "not is_empty"}
+      },
+      "log": "[BUILDING_RISK] 输出图层: {layer_name} ({fc} 要素)",
+      "comment": "输出震度-人口交集图层到画布"
+    }
+  ]
+}

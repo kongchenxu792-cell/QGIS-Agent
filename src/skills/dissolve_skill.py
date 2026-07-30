@@ -2,7 +2,7 @@
 融合技能 — 封装 QGIS native:dissolve 算法。
 
 将具有相同字段值的相邻多边形合并为一个多边形。
-结果持久化到 output/shapefiles/，应用重启后数据不丢失。
+结果持久化到 user_data/exports/shapefiles/，应用重启后数据不丢失。
 """
 
 import os
