@@ -1,4 +1,4 @@
-﻿# QGIS-Agent v2.0.0 — AI 驱动的桌面 GIS 智能助手
+# QGIS-Agent v2.0.0 — AI 驱动的桌面 GIS 智能助手
 
 > 说一句话，完成 GIS 分析。无需安装 QGIS，双击即用。
 
@@ -10,25 +10,31 @@
 
 ## ⚠️ 重要：GitHub 仓库不含 QGIS 引擎
 
-本仓库仅托管源代码（约 2 MB）。QGIS 便携引擎（`qgis-portable/`，约 2.18 GB）因体积超过 GitHub 单文件限制被排除在版本库外。**直接 `git clone` 后双击 `启动.bat` 会报错**——缺的不是代码，是 QGIS 运行环境。
+本仓库仅托管源代码（约 2 MB）。QGIS 便携引擎（`qgis-portable/`，瘦身后约 1.51 GB）不进入版本库，改由 GitHub Release 分发（压缩包约 526 MB）。**全新环境首次运行时会自动下载并解压引擎**，无需手动安装。
 
 ### 如何获得完整可运行版本
 
-**方式一：从已有环境直接复制（最快）**
+**方式一：首次运行自动下载引擎（推荐，全新环境）**
+
+1. `git clone https://github.com/kongchenxu792-cell/QGIS-Agent.git`
+2. 运行 `启动_静默.py`（或双击桌面快捷方式）
+3. 首次启动检测到 `qgis-portable/` 缺失，自动从 Release 下载 `qgis-engine-2.0.0.zip`（约 526 MB）、校验 SHA256 后解压
+4. 引擎就绪后自动进入主程序
+
+**方式二：从已有环境直接复制（最快）**
 
 如果你已经在某台电脑上成功运行过 QGIS-Agent，直接把整个项目文件夹复制到目标电脑即可。`qgis-portable/` 是绿色版，不依赖注册表。
 
-**方式二：手动组装（适合全新环境，约 15 分钟）**
+**方式三：手动下载引擎（可选）**
 
-1. `git clone https://github.com/kongchenxu792-cell/QGIS-Agent.git`
-2. 下载 [QGIS 3.44 Portable](https://qgis.org/download/) 并解压
-3. 将解压后的 QGIS 文件夹重命名为 `qgis-portable`，放在项目根目录
-4. 目录结构应为：
+前往 [Releases](https://github.com/kongchenxu792-cell/QGIS-Agent/releases/tag/engine-2.0.0) 手动下载 `qgis-engine-2.0.0.zip`，解压到项目根目录，得到如下结构后即可运行：
+
    ```
    QGIS-Agent/
    ├── 启动.bat
+   ├── 启动_静默.py
    ├── src/
-   └── qgis-portable/       ← 从这里放进去
+   └── qgis-portable/       ← 解压后放这里
        ├── bin/
        ├── apps/
        │   ├── qgis-ltr/
@@ -36,11 +42,6 @@
        │   └── Python312/
        └── share/
    ```
-5. 双击 `启动.bat`，应能看到 QGIS 界面启动
-
-**方式三：Release 打包版（推荐）**
-
-在 [Releases](https://github.com/kongchenxu792-cell/QGIS-Agent/releases) 页面下载完整打包版本，解压即用。
 
 ### 路径注意事项
 
@@ -59,11 +60,11 @@
 
 ### 5 分钟上手
 
-1. **下载并解压** 项目文件夹到任意位置（建议纯英文路径）
-2. **双击 `启动.bat`**，等待 QGIS 界面加载
-3. 在底部对话框中输入指令，回车执行
+1. **克隆仓库**：`git clone https://github.com/kongchenxu792-cell/QGIS-Agent.git`
+2. **运行 `启动_静默.py`**（或双击桌面快捷方式），首次启动会自动下载引擎（约 526 MB）并解压
+3. 等待 QGIS 界面加载后，在底部对话框中输入指令，回车执行
 
-**无需安装 QGIS**——QGIS 3.44 便携版已随包封装（约 2.18 GB）。
+**无需安装 QGIS**——QGIS 3.44 便携引擎（约 1.51 GB）会在首次运行时自动下载解压。
 
 ### 在线模式（推荐首次体验）
 
@@ -142,8 +143,8 @@ Pipeline 确定性执行（8 步引擎 + Shapely fallback 全链路）
 ```
 QGIS-Agent/
 ├── 启动.bat                    # 一键启动脚本
-├── 启动_静默.py                # 无控制台窗口启动（快捷方式用）
-├── qgis-portable/              # QGIS 3.44.9 便携版（~2.18 GB）
+├── 启动_静默.py                # 无控制台启动 + 首次运行自动下载引擎
+├── qgis-portable/              # QGIS 3.44.9 便携引擎（~1.51 GB，首次运行自动下载）
 ├── src/
 │   ├── main.py                 # 程序入口
 │   ├── __init__.py             # 版本号（v2.0.0）
