@@ -35,3 +35,9 @@ wdac_policy/*.pem
 
 # 交流中转站（符号链接，分发时断链）
 交流中转站/
+
+# Engine slim & distribution
+reports/
+.env
+*.7z
+

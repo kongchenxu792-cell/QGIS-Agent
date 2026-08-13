@@ -1,3 +1,3 @@
 Set WshShell = CreateObject("WScript.Shell")
-WshShell.CurrentDirectory = "D:\桌面\AIQGIS_APP"
-WshShell.Run "C:\WINDOWS\system32\cmd.exe /c ""D:\桌面\AIQGIS_APP\启动.bat""", 0, False
+WshShell.CurrentDirectory = "D:\桌面\QGIS-Agent"
+WshShell.Run "C:\WINDOWS\system32\cmd.exe /c ""D:\桌面\QGIS-Agent\启动.bat""", 0, False
