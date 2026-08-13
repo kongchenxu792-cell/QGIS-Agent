@@ -9,6 +9,14 @@ import subprocess
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 OSGEO4W_ROOT = os.path.join(PROJECT_ROOT, "qgis-portable")
 
+# 首次运行引导：引擎缺失时自动下载解压
+try:
+    from scripts.setup_engine import setup_engine
+    setup_engine(PROJECT_ROOT)
+except Exception as e:
+    print(f"[setup_engine] 引擎准备失败: {e}")
+    sys.exit(1)
+
 # 环境变量
 os.environ["OSGEO4W_ROOT"] = OSGEO4W_ROOT
 os.environ["QGIS_PREFIX_PATH"] = os.path.join(OSGEO4W_ROOT, "apps", "qgis-ltr")

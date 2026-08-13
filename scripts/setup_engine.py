@@ -38,11 +38,11 @@ from pathlib import Path
 
 # 发布者在发布引擎包时，将实际 sha256 填到这里；
 # 若留空则跳过校验（仅打印警告）。
-ENGINE_SHA256 = ""
+ENGINE_SHA256 = "89a56d13dcf318af19bdffdefe9624dba963c39dcd4aaa3077c3003038744138"
 
 # 默认下载源（GitHub Release，由 .engine_version 决定具体 tag）
 GITHUB_REPO = "kongchenxu792-cell/QGIS-Agent"
-RELEASE_BASE = f"https://github.com/{GITHUB_REPO}/releases/download/engine-{{version}}/qgis-engine-{{version}}.7z"
+RELEASE_BASE = f"https://github.com/{GITHUB_REPO}/releases/download/engine-{{version}}/qgis-engine-{{version}}.zip"
 
 
 def _read_engine_version(project_root: Path) -> str:
@@ -149,7 +149,7 @@ def setup_engine(project_root=None) -> str:
 
     version = _read_engine_version(root)
     url = RELEASE_BASE.format(version=version)
-    target = root / f"qgis-engine-{version}.7z"
+    target = root / f"qgis-engine-{version}.zip"
 
     print(f"[setup_engine] 首次运行，正在下载 GIS 引擎 (~650MB) ...")
     print(f"[setup_engine] 版本: {version}")

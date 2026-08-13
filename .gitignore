@@ -41,3 +41,6 @@ reports/
 .env
 *.7z
 
+# 引擎分发压缩包（GitHub 100MB 限制，由 GitHub Release 托管）
+qgis-engine-*.zip
+
