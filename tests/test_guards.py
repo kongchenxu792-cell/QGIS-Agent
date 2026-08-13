@@ -6,9 +6,10 @@
 
 import sys
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-sys.path.insert(0, r"D:\桌面\AIQGIS_APP")
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.core.guards import (
     GuardChecker,

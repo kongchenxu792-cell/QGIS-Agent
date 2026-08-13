@@ -5,9 +5,10 @@
 
 import sys
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch, PropertyMock
 
-sys.path.insert(0, r"D:\桌面\AIQGIS_APP")
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.core.pipeline_executor import (
     PipelineExecutor,
@@ -15,7 +16,7 @@ from src.core.pipeline_executor import (
     StepDef,
 )
 
-TEMPLATE_PATH = r"D:\桌面\AIQGIS_APP\src\core\templates\coverage_analysis.json"
+TEMPLATE_PATH = str(Path(__file__).resolve().parent.parent / "src" / "core" / "templates" / "coverage_analysis.json")
 
 
 def make_mock_qgis_layer(name, geom_type=0, crs_authid="EPSG:3857", feature_count=50):

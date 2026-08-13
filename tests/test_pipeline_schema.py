@@ -7,8 +7,9 @@ $ref 引用解析及模板文件缺失时的错误处理。
 import json
 import sys
 import unittest
+from pathlib import Path
 
-sys.path.insert(0, r"D:\桌面\AIQGIS_APP")
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.core.pipeline_executor import (
     PipelineExecutor,
@@ -19,7 +20,7 @@ from src.core.pipeline_executor import (
     ParamDef,
 )
 
-TEMPLATE_PATH = r"D:\桌面\AIQGIS_APP\src\core\templates\coverage_analysis.json"
+TEMPLATE_PATH = str(Path(__file__).resolve().parent.parent / "src" / "core" / "templates" / "coverage_analysis.json")
 
 
 class TestPipelineSchema(unittest.TestCase):
@@ -100,7 +101,7 @@ class TestPipelineSchema(unittest.TestCase):
     def test_missing_template_raises(self):
         executor = PipelineExecutor()
         with self.assertRaises((FileNotFoundError, OSError, json.JSONDecodeError)):
-            executor._parse_template(r"D:\桌面\AIQGIS_APP\nonexistent_template.json")
+            executor._parse_template(str(Path(__file__).resolve().parent.parent / "nonexistent_template.json"))
 
     # ── ParamDef 解析 ──────────────────────────────────────
 

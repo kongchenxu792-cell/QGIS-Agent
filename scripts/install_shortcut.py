@@ -7,7 +7,7 @@ win32com 优先，PowerShell fallback。
 import os
 import sys
 
-PROJECT_ROOT = r"D:\桌面\QGIS-Agent"
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LAUNCH_BAT = os.path.join(PROJECT_ROOT, "启动_静默.py")
 PYTHONW = os.path.join(PROJECT_ROOT, r"qgis-portable\apps\Python312\pythonw.exe")
 ICON = os.path.join(PROJECT_ROOT, "resources", "aiqgis.ico")

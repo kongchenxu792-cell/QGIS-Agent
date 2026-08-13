@@ -38,7 +38,7 @@ from pathlib import Path
 # 路径常量
 # ---------------------------------------------------------------------------
 
-PROJECT_ROOT = Path(r"D:\桌面\QGIS-Agent")
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 ENGINE_DIR = PROJECT_ROOT / "qgis-portable"
 SP_DIR = ENGINE_DIR / "apps" / "Python312" / "Lib" / "site-packages"
 BIN_DIR = ENGINE_DIR / "bin"
