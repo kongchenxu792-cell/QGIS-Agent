@@ -391,11 +391,50 @@ If unrecognized, reply:
 
 # ── 关键词兜底匹配 ──────────────────────────────────────
 
+def detect_lang(user_text: str) -> str:
+    """根据文本字符特征检测指令语言：ja / en / zh。"""
+    if not user_text:
+        return "zh"
+    ja_chars = 0
+    en_chars = 0
+    for ch in user_text:
+        code = ord(ch)
+        # 平假名 / 片假名
+        if 0x3040 <= code <= 0x30FF:
+            ja_chars += 1
+        # 日文汉字与中文汉字共用区间，不单独计数；ASCII 字母计英文
+        elif ('a' <= ch <= 'z') or ('A' <= ch <= 'Z'):
+            en_chars += 1
+    if ja_chars >= 1:
+        return "ja"
+    if en_chars > max(len(user_text) * 0.3, 3):
+        return "en"
+    return "zh"
+
+
+def _extract_distance_from_text(user_text: str) -> Optional[float]:
+    """从用户文本提取缓冲距离数字（支持「500 米」「500m」「500 メートル」）。
+
+    要求数字后必须紧跟距离单位（米/m/メートル），
+    避免误提取图层名中的数字（如 EPSG3857 的 3857）。
+    """
+    m = re.search(r'(\d+(?:\.\d+)?)\s*(?:米|m|メートル|ｍ)', user_text)
+    if m:
+        try:
+            return float(m.group(1))
+        except ValueError:
+            return None
+    return None
+
+
 def keyword_pre_match(user_text: str, lang: str = "zh") -> Optional[Dict[str, Any]]:
     """关键词兜底匹配：用模板触发词在用户原文中做关键词/正则匹配。
 
     当 LLM 返回 unknown 时，用此方法做最后一次兜底匹配，
     弥补 7B 模型语义映射能力不足的问题。
+
+    lang 由调用方按用户文本检测后传入（zh / ja / en），
+    使日文/英文模板触发词也能参与兜底匹配。
 
     Returns JSON-compatible instruction dict (action + params) if matched, None otherwise.
     """
@@ -424,9 +463,14 @@ def keyword_pre_match(user_text: str, lang: str = "zh") -> Optional[Dict[str, An
             best_params = template.get("params", {}).copy()
 
     if best_action and best_score >= 1:
+        # 兜底距离参数提取：create_buffer 且用户文本含距离数字时覆盖默认值
+        if best_action == "create_buffer" and "distance" in best_params:
+            dist = _extract_distance_from_text(user_text)
+            if dist is not None:
+                best_params["distance"] = dist
         _log.info(
-            "关键词兜底匹配成功：action=%s score=%d user_text=%.80s",
-            best_action, best_score, user_text,
+            "关键词兜底匹配成功：action=%s score=%d lang=%s user_text=%.80s",
+            best_action, best_score, lang, user_text,
         )
         return {"action": best_action, "params": best_params}
     return None

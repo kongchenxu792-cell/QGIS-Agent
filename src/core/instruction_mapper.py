@@ -28,6 +28,7 @@ from core.template_registry import (
     _SYSTEM_PROMPT_EN,
     find_template,
     keyword_pre_match,
+    detect_lang,
     auto_detect_layers_from_text,
 )
 
@@ -133,7 +134,7 @@ class InstructionMapper(HandlersBasicMixin, HandlersAnalysisMixin, HandlersSeism
 
         # 2. 关键词兜底：LLM 返回 unknown 时，用触发词做最后一次匹配
         if action == "unknown" and user_text:
-            keyword_match = keyword_pre_match(user_text)
+            keyword_match = keyword_pre_match(user_text, lang=detect_lang(user_text))
             if keyword_match:
                 action = keyword_match["action"]
                 kw_params = keyword_match.get("params", {})
@@ -144,7 +145,7 @@ class InstructionMapper(HandlersBasicMixin, HandlersAnalysisMixin, HandlersSeism
 
         # 2b. 关键词纠偏：LLM 返回了具体动作但可能与用户意图不符，用关键词做交叉校验
         if user_text and action not in ("unknown", "answer"):
-            keyword_match = keyword_pre_match(user_text)
+            keyword_match = keyword_pre_match(user_text, lang=detect_lang(user_text))
             if keyword_match and keyword_match["action"] != action:
                 _log.info(
                     "关键词纠偏：LLM=%s → keyword=%s (user=%.60s)",

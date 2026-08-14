@@ -226,10 +226,11 @@ class HandlersBasicMixin:
 
         for layer_id, layer in list(proj.mapLayers().items()):
             if layer_name.lower() in layer.name().lower():
+                layer_display_name = layer.name()
                 proj.removeMapLayer(layer_id)
                 if canvas:
                     canvas.refresh()
-                return {"success": True, "message": f"已移除图层：{layer.name()}"}
+                return {"success": True, "message": f"已移除图层：{layer_display_name}"}
 
         return {"success": False, "message": f"未找到图层：{layer_name}"}
 
@@ -420,7 +421,7 @@ class HandlersBasicMixin:
         from qgis.core import (
             QgsProject, QgsVectorLayer, QgsRasterLayer,
             QgsSingleSymbolRenderer, QgsCategorizedSymbolRenderer,
-            QgsGraduatedSymbolRenderer, QgsRendererCategory,
+            QgsGraduatedSymbolRenderer, QgsRendererCategory, QgsRendererRange,
             QgsFillSymbol, QgsLineSymbol, QgsMarkerSymbol,
             QgsSingleBandPseudoColorRenderer, QgsColorRampShader,
             QgsRasterShader, QgsStyle, QgsGraduatedSymbolRenderer,
@@ -504,8 +505,18 @@ class HandlersBasicMixin:
                 values = []
                 for feat in layer.getFeatures():
                     val = feat.attribute(field_name)
-                    if val is not None:
+                    if val is None:
+                        continue
+                    try:
                         values.append(float(val))
+                    except (TypeError, ValueError):
+                        # QVariant 包装值：先解包再转换
+                        qv = val.value() if hasattr(val, "value") else None
+                        if qv is not None:
+                            try:
+                                values.append(float(qv))
+                            except (TypeError, ValueError):
+                                pass
                 if not values:
                     return {"success": False, "message": f"字段 {field_name} 没有有效数值"}
                 vmin, vmax = min(values), max(values)
