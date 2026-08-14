@@ -121,24 +121,86 @@ def _guard_boundary_fc_limit(params_map: Dict[str, Any],
 
 def _guard_crs_match(params_map: Dict[str, Any],
                       guard_def: GuardDef) -> GuardResult:
-    """源图层与边界图层的坐标系必须一致。"""
-    # auto_reproject 时直接跳过检查
-    if guard_def.params.get("auto_reproject"):
-        return GuardResult(
-            condition=guard_def.condition, passed=True,
-            auto_skipped=True, message="auto_reproject 启用，跳过 CRS 检查"
-        )
-
+    """源图层与边界图层的坐标系必须一致；auto_reproject=true 时真实重投影边界图层。"""
     source = params_map.get("source_layer")
     boundary = params_map.get("boundary_layer")
-    if (source and boundary
-            and hasattr(source, 'crs') and hasattr(boundary, 'crs')
-            and source.crs().authid() != boundary.crs().authid()):
+    if not (source and boundary
+            and hasattr(source, 'crs') and hasattr(boundary, 'crs')):
+        return GuardResult(condition=guard_def.condition, passed=True)
+
+    source_crs = source.crs()
+    boundary_crs = boundary.crs()
+
+    # CRS 为空无法判断/重投影时显式失败，禁止静默跳过
+    if not source_crs.isValid() or not boundary_crs.isValid():
         return GuardResult(
             condition=guard_def.condition, passed=False,
-            message=f"CRS 不匹配: source={source.crs().authid()}, boundary={boundary.crs().authid()}"
+            message=(
+                f"CRS 无效: source={source_crs.authid() or 'unknown'}, "
+                f"boundary={boundary_crs.authid() or 'unknown'}，无法执行 CRS 匹配/重投影"
+            )
         )
-    return GuardResult(condition=guard_def.condition, passed=True)
+
+    if source_crs.authid() == boundary_crs.authid():
+        return GuardResult(condition=guard_def.condition, passed=True)
+
+    # 未启用 auto_reproject 时按严格匹配失败
+    if not guard_def.params.get("auto_reproject"):
+        return GuardResult(
+            condition=guard_def.condition, passed=False,
+            message=f"CRS 不匹配: source={source_crs.authid()}, boundary={boundary_crs.authid()}"
+        )
+
+    # auto_reproject=true：真实重投影 boundary 到 source CRS，并写回 params_map
+    try:
+        from qgis.core import (
+            QgsCoordinateTransform, QgsVectorLayer, QgsProject, QgsWkbTypes,
+            QgsFeature, QgsGeometry,
+        )
+        xform = QgsCoordinateTransform(boundary_crs, source_crs, QgsProject.instance())
+        mem_layer = QgsVectorLayer(
+            f"{QgsWkbTypes.displayString(boundary.wkbType())}?crs={source_crs.authid()}",
+            f"{boundary.name() or 'boundary'}_reprojected", "memory"
+        )
+        mem_layer.dataProvider().addAttributes(boundary.fields())
+        mem_layer.updateFields()
+
+        feats = []
+        for feat in boundary.getFeatures():
+            geom = feat.geometry()
+            if geom is None or geom.isEmpty():
+                continue
+            # 显式拷贝 QgsFeature：getFeatures() 迭代复用同一对象，直接 append 会导致多要素退化
+            copied = QgsFeature(feat)
+            copied_geom = QgsGeometry(copied.geometry())
+            copied_geom.transform(xform)
+            copied.setGeometry(copied_geom)
+            feats.append(copied)
+
+        if not feats:
+            return GuardResult(
+                condition=guard_def.condition, passed=False,
+                message=(
+                    f"auto_reproject 重投影后边界图层无有效要素 "
+                    f"(boundary CRS={boundary_crs.authid()} -> {source_crs.authid()})"
+                )
+            )
+
+        mem_layer.dataProvider().addFeatures(feats)
+        mem_layer.updateExtents()
+        params_map["boundary_layer"] = mem_layer
+        return GuardResult(
+            condition=guard_def.condition, passed=True,
+            message=(
+                f"auto_reproject: boundary 已从 {boundary_crs.authid()} "
+                f"重投影到 {source_crs.authid()}"
+            )
+        )
+    except Exception as e:
+        return GuardResult(
+            condition=guard_def.condition, passed=False,
+            message=f"auto_reproject 重投影失败: {e}"
+        )
 
 
 def _guard_population_is_polygon(params_map: Dict[str, Any],

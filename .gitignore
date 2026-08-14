@@ -5,6 +5,10 @@ qgis-portable/
 temp/
 logs/
 
+# QGIS runtime temp artifacts
+regression_out.tmp
+symbology-style.db
+
 # Python
 __pycache__/
 *.py[cod]

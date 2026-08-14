@@ -528,6 +528,7 @@ class PipelineExecutor:
     def _execute_step(self, step: StepDef, input_data: Any, boundary_data: Any) -> StepResult:
         """按 engine_chain 执行，成功且 validate 通过即止。"""
         last_error = None
+        eng_start = time.time()
 
         for eng in step.engine_chain:
             try:
@@ -542,6 +543,7 @@ class PipelineExecutor:
                     _log.info("[step %s] DIAG merged_params=%s", step.id, merged_params)
 
                 result = self._run_engine(eng, step, input_data, boundary_data)
+                result.elapsed = time.time() - eng_start
 
                 if result.error is not None:
                     _log.warning("[step %s] engine=%s ERROR: %s", step.id, eng.name, result.error)
@@ -621,6 +623,33 @@ class PipelineExecutor:
             overlay = self._extract_qgis_layer(boundary_data)
             if overlay is None:
                 return StepResult(step_id=step.id, error="No boundary layer for clip/intersection")
+            # 跨 CRS 时，将 overlay 重投影到 input CRS，避免零命中
+            try:
+                from qgis.core import QgsCoordinateTransform, QgsProject, QgsWkbTypes
+                in_crs = input_layer.crs()
+                ov_crs = overlay.crs()
+                if in_crs.isValid() and ov_crs.isValid() and in_crs.authid() != ov_crs.authid():
+                    xform = QgsCoordinateTransform(ov_crs, in_crs, QgsProject.instance())
+                    mem_layer = QgsVectorLayer(
+                        f"{QgsWkbTypes.displayString(overlay.wkbType())}?crs={in_crs.authid()}",
+                        f"{overlay.name() or 'overlay'}_reprojected", "memory"
+                    )
+                    mem_layer.dataProvider().addAttributes(overlay.fields())
+                    mem_layer.updateFields()
+                    feats = []
+                    for feat in overlay.getFeatures():
+                        geom = feat.geometry()
+                        if geom is None or geom.isEmpty():
+                            continue
+                        geom.transform(xform)
+                        feat.setGeometry(geom)
+                        feats.append(feat)
+                    if feats:
+                        mem_layer.dataProvider().addFeatures(feats)
+                        mem_layer.updateExtents()
+                        overlay = mem_layer
+            except Exception:
+                pass
             params["OVERLAY"] = overlay
 
         try:
@@ -648,8 +677,8 @@ class PipelineExecutor:
                                input_data: Any, boundary_data: Any) -> StepResult:
         try:
             from qgis.core import (
-                QgsVectorLayer, QgsFeatureRequest, QgsSpatialIndex,
-                QgsWkbTypes,
+                QgsVectorLayer, QgsFeatureRequest, QgsSpatialIndex, QgsFeature,
+                QgsWkbTypes, QgsCoordinateTransform, QgsProject,
             )
         except ImportError as e:
             return StepResult(step_id=step.id, error=f"Import error: {e}")
@@ -663,8 +692,55 @@ class PipelineExecutor:
             return StepResult(step_id=step.id, error="No boundary layer")
 
         try:
-            index = QgsSpatialIndex(boundary_layer.getFeatures())
+            source_crs = source_layer.crs()
+            boundary_crs = boundary_layer.crs()
+
+            # CRS 一致性校验：任一 CRS 无效时显式报错，禁止静默降级
+            if not source_crs.isValid() or not boundary_crs.isValid():
+                return StepResult(
+                    step_id=step.id,
+                    error=(
+                        "Spatial index: invalid CRS "
+                        f"source={source_crs.authid() or 'unknown'} "
+                        f"boundary={boundary_crs.authid() or 'unknown'}"
+                    ),
+                )
+
+            # 跨 CRS 时，将 boundary 几何与 extent 转换到 source CRS，避免零命中
+            crs_mismatch = source_crs.authid() != boundary_crs.authid()
+            # 显式拷贝 QgsFeature：getFeatures() 迭代复用同一对象，list() 会导致多要素退化
+            boundary_features = [QgsFeature(f) for f in boundary_layer.getFeatures()]
+            if crs_mismatch:
+                try:
+                    xform = QgsCoordinateTransform(
+                        boundary_crs, source_crs, QgsProject.instance())
+                    transformed = []
+                    for feat in boundary_features:
+                        geom = feat.geometry()
+                        if geom is None or geom.isEmpty():
+                            continue
+                        geom.transform(xform)
+                        transformed.append(feat)
+                    boundary_features = transformed
+                except Exception as e:
+                    return StepResult(
+                        step_id=step.id,
+                        error=f"Spatial index: reproject boundary to {source_crs.authid()} failed: {e}",
+                    )
+
+            index = QgsSpatialIndex()
+            index.addFeatures(boundary_features)
             rect = boundary_layer.extent()
+            if crs_mismatch:
+                try:
+                    rect = QgsCoordinateTransform(
+                        boundary_crs, source_crs, QgsProject.instance()
+                    ).transformBoundingBox(rect)
+                except Exception as e:
+                    return StepResult(
+                        step_id=step.id,
+                        error=f"Spatial index: reproject boundary extent failed: {e}",
+                    )
 
             req = QgsFeatureRequest().setFilterRect(rect)
             candidate_ids = []
@@ -969,6 +1045,25 @@ class PipelineExecutor:
 
             intensity_field = self.params_map.get("intensity_field")
 
+            # 模板承诺留空自动检测震度字段（T\d+_I\d+），缺失时进入覆盖模式会导致
+            # building_risk 统计全 0。这里按注释实现自动检测。
+            if not intensity_field:
+                try:
+                    from core.seismic_situation_map import JMA_INTENSITY_FIELD_PATTERN
+                except ImportError:
+                    from src.core.seismic_situation_map import JMA_INTENSITY_FIELD_PATTERN
+                try:
+                    int_layer_tmp = self._extract_qgis_layer(input_data)
+                    if int_layer_tmp is not None:
+                        for fname in [f.name() for f in int_layer_tmp.fields()]:
+                            if JMA_INTENSITY_FIELD_PATTERN.match(fname):
+                                intensity_field = fname
+                                _log.info("[step %s] auto-detected intensity field: %s",
+                                          step.id, intensity_field)
+                                break
+                except ImportError:
+                    pass
+
             # ── 建筑风险模式：震度图层 × 人口图层 ─────────────────
             if intensity_field:
                 intensity_layer = self._extract_qgis_layer(input_data)
@@ -978,7 +1073,10 @@ class PipelineExecutor:
                 # 自动检测震度字段（正则回退）
                 int_layer_fields = [f.name() for f in intensity_layer.fields()]
                 if intensity_field not in int_layer_fields:
-                    from core.seismic_situation_map import JMA_INTENSITY_FIELD_PATTERN
+                    try:
+                        from core.seismic_situation_map import JMA_INTENSITY_FIELD_PATTERN
+                    except ImportError:
+                        from src.core.seismic_situation_map import JMA_INTENSITY_FIELD_PATTERN
                     for fname in int_layer_fields:
                         if JMA_INTENSITY_FIELD_PATTERN.match(fname):
                             intensity_field = fname
@@ -1010,7 +1108,6 @@ class PipelineExecutor:
 
                 # 预加载人口 zones
                 pop_zones = []
-                total_population = 0.0
                 for feat in population_layer.getFeatures():
                     geo = feat.geometry()
                     if not geo or geo.isEmpty():
@@ -1023,24 +1120,37 @@ class PipelineExecutor:
                         pop_val = float(feat.attribute(pop_field) or 0)
                     except (ValueError, TypeError):
                         pop_val = 0.0
-                    # 判断该人口 zone 是否与任一震度多边形相交
-                    try:
-                        intersects_any = any(
-                            int_geom.intersects(pop_geom) for int_geom, _ in intensity_polygons
-                        )
-                    except Exception:
-                        intersects_any = False
-                    if intersects_any:
-                        total_population += pop_val
                     pop_zones.append((pop_geom, pop_val))
+
+                if not pop_zones:
+                    return StepResult(step_id=step.id, error="No valid population zones")
+
+                # 使用 STRtree 空间索引加速：对人口 zones 建索引，
+                # 每个 intensity 多边形只查可能相交的候选，避免 O(n*m) 暴力双重循环
+                import shapely
+                from shapely import STRtree as _STRtree
+                pop_geoms = [g for g, _ in pop_zones]
+                tree = _STRtree(pop_geoms)
+
+                # 收集与任一 intensity 多边形相交的人口 zone 索引
+                total_population = 0.0
+                intersecting_pop_indices = set()
 
                 # 计算所有震度 × 人口的交集
                 features = []
                 for int_geom, int_prob in intensity_polygons:
-                    for pop_geom, pop_val in pop_zones:
+                    candidate_indices = tree.query(int_geom)
+                    if candidate_indices.size == 0:
+                        continue
+                    for idx in candidate_indices.tolist():
+                        pop_geom, pop_val = pop_zones[idx]
                         try:
                             if not int_geom.intersects(pop_geom):
                                 continue
+                        except Exception:
+                            continue
+                        intersecting_pop_indices.add(idx)
+                        try:
                             intersection = pop_geom.intersection(int_geom)
                             if intersection.is_empty:
                                 continue
@@ -1056,6 +1166,8 @@ class PipelineExecutor:
                             })
                         except Exception:
                             continue
+
+                total_population = sum(pop_zones[i][1] for i in intersecting_pop_indices)
 
                 if not features:
                     return StepResult(step_id=step.id, error="No population features intersect with intensity area")
