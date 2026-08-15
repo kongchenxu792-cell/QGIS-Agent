@@ -252,6 +252,11 @@ class InstructionMapper(HandlersBasicMixin, HandlersAnalysisMixin, HandlersSeism
         if project:
             params = _correct_layer_params(project, params, user_text)
 
+        # 3.6 参数键别名：LLM 可能输出 layer 而非 layer_name（export_attribute/zoom_to_layer 等）
+        if "layer" in params and "layer_name" not in params:
+            params["layer_name"] = params["layer"]
+            _log.info("参数键别名：layer → layer_name (%s)", params["layer_name"])
+
         # 4. 执行处理函数
         handler_name = template["handler"]
         handler = getattr(self, handler_name, None)
