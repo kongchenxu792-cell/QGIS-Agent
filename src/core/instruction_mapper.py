@@ -42,12 +42,77 @@ _LAYER_PARAM_KEYS = [
     "intensity_layer", "intensity_field",
 ]
 
+# 字段类参数键（占位符应清空后交由字段自动探测，而非按图层名匹配）
+_FIELD_PARAM_KEYS = {"population_field", "intensity_field"}
+
+# 占位文案模式：小模型常照抄 system prompt 示例中的占位符
+_PLACEHOLDER_PATTERNS = [
+    r"图层名", r"字段名", r"图层\d+", r"字段\d+",
+    r"field\d+", r"layer\s*name", r"参数名", r"xxx", r"\.\.\.",
+]
+
+
+def _is_placeholder(val: str) -> bool:
+    """判断 LLM 输出值是否为占位文案（如「图层名」「字段1」「field2」）。"""
+    if not val:
+        return False
+    v = val.strip().lower()
+    for pat in _PLACEHOLDER_PATTERNS:
+        if re.search(pat, v):
+            return True
+    return False
+
+
+def _find_layer_by_name(project, name: str):
+    """按图层名在项目中查找 QgsMapLayer（找不到返回 None）。"""
+    if not project or not name:
+        return None
+    for layer in project.mapLayers().values():
+        if layer.name() == name:
+            return layer
+    return None
+
+
+def _auto_detect_field_params(project, params: Dict[str, Any]) -> None:
+    """对清空/占位后的字段参数做自动探测兜底（就地修改 params）。
+
+    - population_field：取 population_layer 首个数值字段
+    - intensity_field：优先 J-SHIS 震度概率字段（T\\d+_I\\d+），否则首个数值字段
+    """
+    if not params.get("population_field") and params.get("population_layer"):
+        pop_layer = _find_layer_by_name(project, params["population_layer"])
+        if pop_layer is not None and hasattr(pop_layer, "fields"):
+            for f in pop_layer.fields():
+                if f.isNumeric():
+                    params["population_field"] = f.name()
+                    _log.info("自动探测人口字段：%s", f.name())
+                    break
+    if not params.get("intensity_field") and params.get("intensity_layer"):
+        int_layer = _find_layer_by_name(project, params["intensity_layer"])
+        if int_layer is not None and hasattr(int_layer, "fields"):
+            try:
+                from core.seismic_situation_map import JMA_INTENSITY_FIELD_PATTERN
+            except Exception:
+                JMA_INTENSITY_FIELD_PATTERN = None
+            for f in int_layer.fields():
+                if JMA_INTENSITY_FIELD_PATTERN and JMA_INTENSITY_FIELD_PATTERN.match(f.name()):
+                    params["intensity_field"] = f.name()
+                    _log.info("自动探测震度字段：%s", f.name())
+                    break
+            if not params.get("intensity_field"):
+                for f in int_layer.fields():
+                    if f.isNumeric():
+                        params["intensity_field"] = f.name()
+                        _log.info("兜底震度字段（首个数值型）：%s", f.name())
+                        break
+
 
 def _correct_layer_params(project, params: Dict[str, Any], user_text: str) -> Dict[str, Any]:
     """校验并修正 LLM 输出的图层参数。
 
     离线小模型（7B）经常幻想不存在的图层名（如 source_points），
-    本函数在校验失败时：清除无效值 → auto_detect → 单图层兜底。
+    或照抄 system prompt 占位文案（如「图层名」「字段1」）。
+    本函数在校验失败时：清除无效值 → auto_detect → 字段自动探测 → 单图层兜底。
     """
     loaded_layers = list(project.mapLayers().values())
     if not loaded_layers:
@@ -58,7 +123,19 @@ def _correct_layer_params(project, params: Dict[str, Any], user_text: str) -> Di
 
     for key in _LAYER_PARAM_KEYS:
         val = params.get(key, "")
-        if val and val not in loaded_names:
+        if not val:
+            continue
+        if key in _FIELD_PARAM_KEYS:
+            # 字段参数：占位文案直接清空，交由字段自动探测接管
+            if _is_placeholder(val):
+                _log.warning(
+                    "LLM 占位字段 '%s' (参数 %s)，已清空待自动探测",
+                    val, key,
+                )
+                params[key] = ""
+                need_correction = True
+            continue
+        if val not in loaded_names:
             _log.warning(
                 "LLM 幻想的图层名 '%s' (参数 %s) 不在项目中，可用图层：%s",
                 val, key, loaded_names,
@@ -68,6 +145,9 @@ def _correct_layer_params(project, params: Dict[str, Any], user_text: str) -> Di
 
     if need_correction:
         params = auto_detect_layers_from_text(user_text, params, project)
+
+    # 字段参数自动探测（占位符清空后触发）
+    _auto_detect_field_params(project, params)
 
     # 单图层兜底：只加载了一个图层时，用它填充所有仍为空的 layer 参数
     if len(loaded_layers) == 1:

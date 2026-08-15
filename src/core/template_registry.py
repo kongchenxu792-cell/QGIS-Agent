@@ -516,6 +516,47 @@ def auto_detect_layers_from_text(
                 found_names.append(n)
                 _log.info("模糊匹配图层：'%s' ← 前缀 '%s' 出现在用户文本中", n, prefix)
 
+    # 反向词匹配：口语简称（如「震度数据」→「东京震度分布数据」、「POI」→「demo_poi」）
+    cjk_blocks = re.findall(r"[\u4e00-\u9fff]+", user_text)
+    ascii_words = [w.lower() for w in re.findall(r"[A-Za-z0-9]{2,}", user_text)]
+    candidates = set(ascii_words)
+    for blk in cjk_blocks:
+        if len(blk) < 2:
+            continue
+        # 连续中文按 3~4 字窗口枚举，覆盖「震度数据」这类省略完整名的简称
+        # （下限 3 字，避免「东京」这类 2 字词宽泛匹配多个图层名）
+        for size in range(min(4, len(blk)), 2, -1):
+            for i in range(len(blk) - size + 1):
+                candidates.add(blk[i:i + size])
+    existing = set(found_names)
+    hit_word = {}
+    for n in layer_names:
+        if n in existing:
+            continue
+        low = n.lower()
+        best, best_len = None, 0
+        for w in candidates:
+            if len(w) < 2:
+                continue
+            # 子序列匹配：口语简称可跳字（如「震度数据」→「东京震度分布数据」）
+            it = iter(low)
+            if all(c in it for c in w) and len(w) > best_len:
+                best, best_len = w, len(w)
+        if best:
+            found_names.append(n)
+            hit_word[n] = best
+            _log.info("反向词匹配图层：'%s' ← 用户词 '%s'", n, best)
+
+    # 按 user_text 首次出现位置排序（先提及的在前，用于 target/source 角色分配）
+    def _pos(n: str) -> int:
+        if n in user_text:
+            return user_text.find(n)
+        w = hit_word.get(n)
+        if w and w in user_text:
+            return user_text.find(w)
+        return len(user_text) + 1
+    found_names.sort(key=_pos)
+
     if not found_names:
         return params
 
@@ -531,10 +572,10 @@ def auto_detect_layers_from_text(
 
     for key in layer_params:
         if key in filled and not filled[key]:
-            if key == "target_layer" and len(found_names) >= 2:
-                filled[key] = found_names[1]
-            elif key == "join_layer" and found_names:
-                filled[key] = found_names[0]
+            if key == "target_layer" and found_names:
+                filled[key] = found_names[0]   # 先提及 → target
+            elif key == "join_layer" and len(found_names) >= 2:
+                filled[key] = found_names[1]   # 后提及 → join
             elif key == "layer_name" and found_names:
                 filled[key] = found_names[0]
             # ── source_layer / boundary_layer：覆盖分析专用 ──

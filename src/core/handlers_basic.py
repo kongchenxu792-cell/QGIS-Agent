@@ -100,6 +100,9 @@ class HandlersBasicMixin:
         from qgis.core import QgsVectorLayer, QgsRasterLayer, QgsProject
         proj = project or QgsProject.instance()
 
+        # ── 参数键别名兼容：LLM 可能输出 filename / path ──
+        file_path = file_path or kwargs.get("filename") or kwargs.get("path") or ""
+
         if not file_path or not os.path.exists(file_path):
             return {"success": False, "message": f"文件不存在：{file_path}"}
 
@@ -580,12 +583,19 @@ class HandlersBasicMixin:
 
     def _handle_export_attribute(self, canvas=None, project=None, layer_name: str = "",
                                   output_path: str = "", **kwargs) -> Dict[str, Any]:
+        # ── 参数键别名兼容：LLM 可能输出 file_path / file / filename ──
+        output_path = (output_path or kwargs.get("file_path")
+                       or kwargs.get("file") or kwargs.get("filename") or "")
         layer = self._find_layer(project, layer_name)
         if layer is None:
             return {"success": False, "message": f"未找到图层：{layer_name}"}
         err = self._check_vector(layer)
         if err:
             return err
+        # ── 默认输出路径兜底：用户未指定时生成带时间戳的 CSV ──
+        if not output_path:
+            from core.output_persistence import generate_output_path
+            output_path = generate_output_path("export", layer.name(), extension=".csv")
         return self._export_attribute_table(layer, output_path)
 
     def _handle_export_layer(self, canvas=None, project=None, layer_name: str = "",
