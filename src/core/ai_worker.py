@@ -25,19 +25,39 @@ _log = logging.getLogger("ai_worker")
 
 # ---------------------------------------------------------------------------
 # P1 改造：离线模式全局标志（由 main_window 设置）
+# P0 混动模式：三态 online / offline / hybrid
+#   - offline：纯本地；online：纯云端；hybrid：本地优先、失败升级云端
 # ---------------------------------------------------------------------------
-_offline_mode = False
+_mode = "offline"
+
+
+def set_mode(mode: str) -> None:
+    """设置全局模式：'online' / 'offline' / 'hybrid'。"""
+    global _mode
+    if mode not in ("online", "offline", "hybrid"):
+        mode = "offline"
+    _mode = mode
+
+
+def get_mode() -> str:
+    """查询当前全局模式。"""
+    return _mode
 
 
 def set_offline_mode(value: bool) -> None:
-    """设置全局离线模式标志。"""
-    global _offline_mode
-    _offline_mode = value
+    """兼容旧调用：True → offline，False → online。"""
+    global _mode
+    _mode = "offline" if value else "online"
 
 
 def is_offline_mode() -> bool:
-    """查询当前是否为离线模式。"""
-    return _offline_mode
+    """离线/混动均视为「本地优先」：返回 True 表示先走本地大模型。"""
+    return _mode in ("offline", "hybrid")
+
+
+def is_hybrid_mode() -> bool:
+    """查询当前是否为混动模式（本地失败可升级云端）。"""
+    return _mode == "hybrid"
 
 
 # ---------------------------------------------------------------------------
@@ -468,7 +488,7 @@ class AIProcessingWorker(QThread):
 
     def run(self) -> None:
         try:
-            if not _offline_mode:
+            if not is_offline_mode():
                 self._validate_config()
             _log.info("发起 AI 流水线规划请求，用户指令长度：%d 字符", len(self.user_text))
             response_text = self._request_llm_pipeline()
@@ -548,77 +568,95 @@ class AIProcessingWorker(QThread):
             return self.layer_metadata
 
     def _request_llm_pipeline(self) -> str:
-        """调用 API 获取技能流水线规划。
+        """调度 LLM 流水线：按全局模式路由。
 
-        Phase 2+3 升级：多模态视觉分支。
-        当 viewport_snapshots 不为空时，自动切换到 OpenAI Vision API 格式，
-        注入画布截图和视口空间元数据。
-
-        消息结构（文本模式）：
-          system（含技能清单+图层状态+历史）→ 历史消息 → 当前用户指令。
-
-        消息结构（多模态模式）：
-          system（含空间尺度感知规则）→ 历史消息 → user content[{text+, image_url*}]。
+        - online：走云端（在线逻辑）
+        - offline：走本地大模型
+        - hybrid：本地优先；本地失败（unknown/异常）时升级云端
         """
 
         # ========== 实时状态感知（Perception） ==========
         current_layer_metadata = self._capture_live_qgis_state()
 
-        # P1 改造：离线模式 → 调用本地大模型
-        if _offline_mode:
+        if is_offline_mode():
             try:
-                from core.local_llm import LocalLLMClient
-                from core.instruction_mapper import InstructionMapper
-                from core.config_manager import config_manager as cm
-                from qgis.core import QgsProject
-                from qgis.utils import iface
-            except ImportError as e:
-                raise RuntimeError(f"离线模式模块加载失败：{e}")
+                return self._request_local_pipeline(current_layer_metadata)
+            except Exception as exc:
+                if is_hybrid_mode():
+                    _log.info("混动模式：本地调用失败，升级云端：%s", exc)
+                    return self._request_online_pipeline(current_layer_metadata)
+                raise
+        return self._request_online_pipeline(current_layer_metadata)
 
-            mapper = InstructionMapper()
-            lang = "zh"
-            try:
-                lang = cm.language
-            except Exception:
-                pass
+    def _request_local_pipeline(self, current_layer_metadata: List[Dict[str, Any]]) -> str:
+        """本地大模型流水线：LocalLLMClient + InstructionMapper。
 
-            system_prompt = mapper.get_system_prompt(lang)
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": self.user_text},
-            ]
+        混动模式下，本地无法完成（unknown/失败）时升级云端。
+        """
+        try:
+            from core.local_llm import LocalLLMClient
+            from core.instruction_mapper import InstructionMapper
+            from core.config_manager import config_manager as cm
+            from qgis.core import QgsProject
+            from qgis.utils import iface
+        except ImportError as e:
+            raise RuntimeError(f"离线模式模块加载失败：{e}")
 
-            client = LocalLLMClient()
-            try:
-                response_text = client.chat(messages)
-            except ConnectionError as e:
-                raise RuntimeError(str(e))
-            except TimeoutError as e:
-                raise RuntimeError(str(e))
-            except Exception as e:
-                raise RuntimeError(f"本地大模型调用失败：{e}")
+        mapper = InstructionMapper()
+        lang = "zh"
+        try:
+            lang = cm.language
+        except Exception:
+            pass
 
-            # 尝试匹配并执行指令
-            canvas = self.canvas if self.canvas else None
-            project = QgsProject.instance()
+        system_prompt = mapper.get_system_prompt(lang)
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": self.user_text},
+        ]
 
-            result = mapper.match_and_execute(
-                response_text,
-                canvas=canvas,
-                project=project,
-                user_text=self.user_text,
+        client = LocalLLMClient()
+        try:
+            response_text = client.chat(messages)
+        except ConnectionError as e:
+            raise RuntimeError(str(e))
+        except TimeoutError as e:
+            raise RuntimeError(str(e))
+        except Exception as e:
+            raise RuntimeError(f"本地大模型调用失败：{e}")
+
+        # 尝试匹配并执行指令
+        canvas = self.canvas if self.canvas else None
+        project = QgsProject.instance()
+
+        result = mapper.match_and_execute(
+            response_text,
+            canvas=canvas,
+            project=project,
+            user_text=self.user_text,
+        )
+
+        # 混动模式：本地无法完成（unknown / success=False）→ 升级云端
+        if is_hybrid_mode() and not result.get("success", False):
+            _log.info(
+                "混动模式：本地无法完成（action=%s），升级云端",
+                result.get("action"),
             )
+            return self._request_online_pipeline(current_layer_metadata)
 
-            # 返回一个特殊流水线，由 _execute_pipeline 处理离线响应
-            return json.dumps([{
-                "skill": "_offline_response",
-                "arguments": json.dumps({
-                    "success": result.get("success", False),
-                    "message": result.get("message", ""),
-                    "action": result.get("action", ""),
-                }),
-                "reasoning": f"离线模式：{result.get('action', '问答')}",
-            }], ensure_ascii=False)
+        # 返回一个特殊流水线，由 _execute_pipeline 处理离线响应
+        return json.dumps([{
+            "skill": "_offline_response",
+            "arguments": json.dumps({
+                "success": result.get("success", False),
+                "message": result.get("message", ""),
+                "action": result.get("action", ""),
+            }),
+            "reasoning": f"离线模式：{result.get('action', '问答')}",
+        }], ensure_ascii=False)
+
+    def _request_online_pipeline(self, current_layer_metadata: List[Dict[str, Any]]) -> str:
+        """云端大模型流水线：多模态优先，否则纯文本走 InstructionMapper。"""
 
         # ── 分支：多模态 vs 纯文本 ──
         if self.viewport_snapshots:

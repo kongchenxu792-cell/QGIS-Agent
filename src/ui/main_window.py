@@ -426,7 +426,14 @@ class MainWindow(QMainWindow):
         if not ai_config.MODEL_NAME or ai_config.MODEL_NAME == "qwen-plus":
             if self.config.model_name:
                 ai_config.MODEL_NAME = self.config.model_name
-        self.offline_mode = (self.config.last_mode == "offline")
+        # P1 改造：在线/离线/混动三态模式
+        self.current_mode = (
+            self.config.last_mode
+            if self.config.last_mode in ("online", "offline", "hybrid")
+            else "offline"
+        )
+        # 兼容布尔语义：offline 与 hybrid 均为「本地优先」
+        self.offline_mode = self.current_mode in ("offline", "hybrid")
         self.offline_mode_label: Optional[QLabel] = None
         self._offline_buttons: List[QPushButton] = []
 
@@ -499,7 +506,7 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence(Qt.CTRL + Qt.Key_0), self, self._zoom_full)
 
     def _build_mode_toggle(self) -> QWidget:
-        """P1 改造：构建在线/离线模式切换栏 + 语言切换。"""
+        """P1 改造：构建在线/离线/混动三态模式切换栏 + 语言切换。"""
 
         bar = QFrame(self)
         bar.setObjectName("modeToggleBar")
@@ -521,35 +528,47 @@ class MainWindow(QMainWindow):
         self.btn_online = QRadioButton(self._lm.tr("mode_online"), bar)
         self.btn_online.setToolTip(self._lm.tr("mode_online_tooltip"))
         self.btn_online.toggled.connect(self._on_mode_toggled)
-        self.btn_online.setChecked(not self.offline_mode)
+        self.btn_online.setChecked(self.current_mode == "online")
+
+        self.btn_hybrid = QRadioButton(self._lm.tr("mode_hybrid"), bar)
+        self.btn_hybrid.setToolTip(self._lm.tr("mode_hybrid_tooltip"))
+        self.btn_hybrid.toggled.connect(self._on_mode_toggled)
+        self.btn_hybrid.setChecked(self.current_mode == "hybrid")
 
         self.btn_offline = QRadioButton(self._lm.tr("mode_offline"), bar)
         self.btn_offline.setToolTip(self._lm.tr("mode_offline_tooltip"))
         self.btn_offline.toggled.connect(self._on_mode_toggled)
-        self.btn_offline.setChecked(self.offline_mode)
+        self.btn_offline.setChecked(self.current_mode == "offline")
 
         mode_group = QButtonGroup(bar)
         mode_group.addButton(self.btn_online)
+        mode_group.addButton(self.btn_hybrid)
         mode_group.addButton(self.btn_offline)
 
-        # 状态指示标签（根据上次保存的模式初始化）
-        if self.offline_mode:
-            self.offline_mode_label = QLabel(" " + self._lm.tr("status_offline"), bar)
-            self.offline_mode_label.setStyleSheet("""
-                color: #dc2626; font-weight: 600; font-size: 12px;
-                border: 1px solid #fca5a5; border-radius: 14px;
-                padding: 2px 12px; background: #fef2f2;
-            """)
-        else:
-            self.offline_mode_label = QLabel(" " + self._lm.tr("status_online"), bar)
+        # 状态指示标签（根据上次保存的模式初始化，三态样式）
+        self.offline_mode_label = QLabel(" " + self._lm.tr("status_" + self.current_mode), bar)
+        if self.current_mode == "online":
             self.offline_mode_label.setStyleSheet("""
                 color: #16a34a; font-weight: 600; font-size: 12px;
                 border: 1px solid #86efac; border-radius: 14px;
                 padding: 2px 12px; background: #f0fdf4;
             """)
+        elif self.current_mode == "hybrid":
+            self.offline_mode_label.setStyleSheet("""
+                color: #b45309; font-weight: 600; font-size: 12px;
+                border: 1px solid #fcd34d; border-radius: 14px;
+                padding: 2px 12px; background: #fffbeb;
+            """)
+        else:
+            self.offline_mode_label.setStyleSheet("""
+                color: #dc2626; font-weight: 600; font-size: 12px;
+                border: 1px solid #fca5a5; border-radius: 14px;
+                padding: 2px 12px; background: #fef2f2;
+            """)
 
         layout.addWidget(mode_label)
         layout.addWidget(self.btn_online)
+        layout.addWidget(self.btn_hybrid)
         layout.addWidget(self.btn_offline)
         layout.addWidget(self.offline_mode_label)
         layout.addStretch()
@@ -574,20 +593,59 @@ class MainWindow(QMainWindow):
         return bar
 
     def _on_mode_toggled(self) -> None:
-        """P1 改造：在线/离线模式切换回调。"""
+        """P1 改造：在线/离线/混动三态模式切换回调（含风险弹窗）。"""
 
-        if self.btn_offline.isChecked():
-            self.offline_mode = True
-            self._apply_offline_mode()
-            self.config.last_mode = "offline"
+        if self.btn_online.isChecked():
+            target = "online"
+        elif self.btn_hybrid.isChecked():
+            target = "hybrid"
         else:
-            self.offline_mode = False
+            target = "offline"
+
+        if target == self.current_mode:
+            return
+
+        # 风险弹窗：切到混动/在线时提醒（离线不弹；取消则不切换）
+        if target in ("hybrid", "online"):
+            if not self._confirm_risk_switch(target):
+                if self.current_mode == "online":
+                    self.btn_online.setChecked(True)
+                elif self.current_mode == "hybrid":
+                    self.btn_hybrid.setChecked(True)
+                else:
+                    self.btn_offline.setChecked(True)
+                return
+
+        self.current_mode = target
+        self.offline_mode = target in ("offline", "hybrid")
+        if target == "offline":
+            self._apply_offline_mode()
+        elif target == "hybrid":
+            self._apply_hybrid_mode()
+        else:
             self._apply_online_mode()
-            self.config.last_mode = "online"
+        self.config.last_mode = target
 
         # 同步到 ai_worker 全局标志（防御层）
-        from core.ai_worker import set_offline_mode
-        set_offline_mode(self.offline_mode)
+        from core.ai_worker import set_mode
+        set_mode(target)
+
+    def _confirm_risk_switch(self, target: str) -> bool:
+        """风险提醒弹窗：返回 True 表示继续切换，False 表示取消。"""
+        from PyQt5.QtWidgets import QMessageBox
+        lm = self._lm
+        title = lm.tr("risk_title_" + target)
+        body = lm.tr("risk_body_" + target)
+        tip = lm.tr("risk_tip_" + target)
+        box = QMessageBox(self)
+        box.setWindowTitle(title)
+        box.setText(body + "\n\n" + tip)
+        box.setIcon(QMessageBox.Warning)
+        continue_btn = box.addButton(lm.tr("risk_continue"), QMessageBox.AcceptRole)
+        cancel_btn = box.addButton(lm.tr("risk_cancel"), QMessageBox.RejectRole)
+        box.setDefaultButton(cancel_btn)
+        box.exec_()
+        return box.clickedButton() is continue_btn
 
     def _on_language_changed(self, _index: int) -> None:
         """语言下拉框切换回调。"""
@@ -600,8 +658,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"{self._lm.tr('window_title')} v{_app_version}")
         self._refresh_all_labels()
         self.statusBar().showMessage(
-            self._lm.tr("status_online") if not self.offline_mode
-            else self._lm.tr("status_offline"),
+            self._lm.tr("status_" + self.current_mode),
             3000,
         )
 
@@ -610,13 +667,14 @@ class MainWindow(QMainWindow):
         # 模式切换栏
         self.btn_online.setText(self._lm.tr("mode_online"))
         self.btn_online.setToolTip(self._lm.tr("mode_online_tooltip"))
+        self.btn_hybrid.setText(self._lm.tr("mode_hybrid"))
+        self.btn_hybrid.setToolTip(self._lm.tr("mode_hybrid_tooltip"))
         self.btn_offline.setText(self._lm.tr("mode_offline"))
         self.btn_offline.setToolTip(self._lm.tr("mode_offline_tooltip"))
 
         # 状态标签
         if self.offline_mode_label:
-            txt = self._lm.tr("status_offline") if self.offline_mode else self._lm.tr("status_online")
-            self.offline_mode_label.setText(" " + txt)
+            self.offline_mode_label.setText(" " + self._lm.tr("status_" + self.current_mode))
 
         # 菜单栏
         self._refresh_menu_labels()
@@ -905,6 +963,27 @@ class MainWindow(QMainWindow):
             """)
 
         self.statusBar().showMessage(self._lm.tr("msg_switched_online"), 5000)
+
+    def _apply_hybrid_mode(self) -> None:
+        """应用混动模式 UI 状态（本地优先，可升级云端）。"""
+        self.ai_prompt_input.setEnabled(True)
+        self.ai_prompt_input.setPlaceholderText(self._lm.tr("ai_placeholder_offline_local"))
+        self.run_button.setEnabled(True)
+        self.run_button.setToolTip(self._lm.tr("btn_run_tip"))
+        self.screenshot_button.setEnabled(False)
+
+        for btn in self._offline_buttons:
+            btn.setEnabled(False)
+
+        if self.offline_mode_label:
+            self.offline_mode_label.setText(" " + self._lm.tr("status_hybrid"))
+            self.offline_mode_label.setStyleSheet("""
+                color: #b45309; font-weight: 600; font-size: 12px;
+                border: 1px solid #fcd34d; border-radius: 14px;
+                padding: 2px 12px; background: #fffbeb;
+            """)
+
+        self.statusBar().showMessage(self._lm.tr("status_hybrid_switched"), 5000)
 
     def _build_menubar(self) -> None:
         """构建菜单栏。"""
@@ -2457,8 +2536,8 @@ class MainWindow(QMainWindow):
             表格文件（.xlsx / .xls / .csv）的绝对路径。
         """
 
-        # P1 改造：离线模式拦截
-        if self.offline_mode:
+        # P1 改造：纯离线模式拦截（hybrid 本地失败可升级云端）
+        if self.current_mode == "offline":
             self.statusBar().showMessage(
                 "离线模式：表格文件拖入已忽略。请切换至在线模式使用 AI 表格解析。", 5000
             )

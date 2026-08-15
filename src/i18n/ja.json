@@ -1,15 +1,12 @@
 {
   "window_title": "AI 駆動軽量デスクトップ GIS",
-
   "mode_label": "動作モード：",
   "mode_online": "オンラインモード",
   "mode_offline": "オフラインモード",
   "mode_online_tooltip": "オンラインモード: AI自然言語分析エンジンを起動、ネットワーク接続LLM呼び出し対応",
   "mode_offline_tooltip": "オフラインモード: ネットワーク切断状態で実行、ローカルクイックフローボタンのみ使用",
-
   "status_online": "オンライン — AIエンジン利用可能",
   "status_offline": "オフライン — ローカルクイックフローのみ利用可能",
-
   "menu_file": "ファイル(&F)",
   "menu_new_project": "新規プロジェクト(&N)",
   "menu_close_project": "プロジェクトを閉じる(&C)",
@@ -24,7 +21,6 @@
   "menu_help": "ヘルプ(&H)",
   "menu_view_log": "ログを表示(&L)...",
   "menu_about": "AIQGISについて(&A)",
-
   "toolbar_title": "マップツール",
   "tool_pan": "移動",
   "tool_zoom_in": "拡大",
@@ -32,41 +28,33 @@
   "tool_pan_tip": "地図移動を有効化（マウス左ボタン長押しでドラッグ）",
   "tool_zoom_in_tip": "矩形選択拡大を有効化（マウス左ボタン長押しで矩形領域をドラッグ）",
   "tool_zoom_out_tip": "矩形選択縮小を有効化（地図をクリックまたは矩形領域をドラッグ）",
-
   "sidebar_title": "レイヤ一覧",
   "btn_remove_layer": "レイヤを削除",
   "btn_zoom_layer": "レイヤにズーム",
   "btn_remove_tip": "プロジェクトから選択レイヤを削除（ファイルは削除されません）",
   "btn_zoom_tip": "選択レイヤの範囲に地図をズーム",
-
   "canvas_tooltip": "SHP、GeoJSON、TIFなどのレイヤファイルをここにドラッグ＆ドロップして読み込みできます。",
   "canvas_status": "QGIS環境が正しく初期化されていません。",
-
   "ai_placeholder_online": "自然言語で空間分析命令を入力してください。例：「現在のレイヤに30メートルのバッファを作成」",
   "ai_placeholder_offline": "オフラインモード — クイックフローボタンのみ使用可能",
   "ai_tooltip": "AIが自然言語命令をPyQGIS処理コードに変換し自動実行します。",
   "ai_response_placeholder": "AIの応答がここに表示されます...",
   "ai_response_tooltip": "AIから返された元の応答内容",
-
   "btn_run_ai": "AI分析を実行",
   "btn_screenshot": "キャンバススクリーンショット分析",
   "btn_run_tip": "現在のAI地理空間分析命令を実行",
   "btn_screenshot_tip": "現在のキャンバスをキャプチャし、視覚分析に基づいて命令を実行",
-
   "label_shortcuts": "クイックフロー：",
-
   "btn_cadastral": "1. 地籍標準化",
   "btn_hydrology": "2. DEM水文解析",
   "btn_batch_clip": "3. 一括切取+投影",
   "btn_attribute_batch": "4. 属性一括処理",
   "btn_thematic_map": "5. 主題図一括出力",
-
   "tip_cadastral": "レイヤをJGD2000に一括変換 → トポロジチェック修正 → 属性整理 → 標準SHP出力",
   "tip_hydrology": "窪地填充 → D8流向抽出 → 集水累積 → 河川網抽出 → 溝密度統計",
   "tip_batch_clip": "マルチレイヤ一括読み込み → 境界クリップ → JGD2000統一 → 分類アーカイブ",
   "tip_attribute_batch": "条件フィルタ → フィールド一括代入 → SHP出力",
   "tip_thematic_map": "凡例/縮尺/方位マーク → 統一スタイルレンダリング → 一括PNG/PDF",
-
   "status_ready": "システム準備完了。SHP、GeoJSON、TIFなどのレイヤファイルを地図キャンバスにドラッグ＆ドロップできます。",
   "status_offline_switched": "オフラインモードに切り替えました。クイックフローボタンのみでタスクを実行できます。",
   "status_online_switched": "オンラインモードに切り替えました。AI自然言語エンジンが有効です。",
@@ -102,12 +90,10 @@
   "status_heal_retry": "自動修正中（{current}/{max} 回目）...",
   "status_heal_failed": "自動修正失敗",
   "status_project_saved": "AIQGISが自動で高品質な地図を作成しました！プロジェクトファイルをダブルクリックして直接レイアウト印刷できます。",
-
   "pipeline_prefix": "[オフラインモード] 実行中：{name}...",
   "pipeline_complete": "\nオフラインクイックフロー実行完了！\n",
   "pipeline_output_dir": "出力ディレクトリ：{dir}",
   "pipeline_all_done": "複合タスクパイプライン全完了（全 {total} ステップ）",
-
   "msgbox_title_offline": "オフラインモード",
   "msgbox_title_missing_instruction": "分析命令が不足しています",
   "msgbox_title_missing_layer": "レイヤデータが不足しています",
@@ -133,7 +119,6 @@
   "msgbox_title_workflow_unknown": "不明なワークフロー",
   "msgbox_title_workflow_load_failed": "読み込み失敗",
   "msgbox_title_offline_error": "オフラインフローエラー",
-
   "msg_offline_blocked": "現在オフラインモードです。クイックフローボタンのみでタスクを実行できます。\n下部の「クイックフロー」ボタンを使用するか、オンラインモードに切り替えてください。",
   "msg_missing_instruction": "地理空間分析命令を入力してから実行してください。",
   "msg_missing_layer": "現在分析可能なレイヤがありません。少なくとも1つのレイヤをドラッグ＆ドロップで読み込んでください。",
@@ -142,29 +127,23 @@
   "msg_select_layer_first": "レイヤ一覧でレイヤを選択してください。",
   "msg_api_saved": "API設定が更新されました。次回の分析から新しい設定が使用されます。",
   "msg_save_failed": "設定を保存できません：{error}",
-
   "about_title": "AIQGISについて",
   "about_text": "<h2>AIQGIS</h2><p>AI駆動軽量デスクトップGISアプリケーション</p><p>バージョン 0.2.0</p><p>PyQGIS + DeepSeek ベース</p><p>オープンソースプロジェクト - GitHub</p>",
-
   "layer_type_vector": "ベクタレイヤ",
   "layer_type_raster": "ラスタレイヤ",
   "layer_type_unknown": "不明なタイプ",
-
   "context_menu_attr_table": "属性テーブルを表示",
   "context_menu_zoom": "レイヤにズーム",
   "context_menu_rename": "レイヤ名を変更",
   "context_menu_copy": "レイヤを複製",
   "context_menu_remove": "レイヤを削除",
-
   "rename_dialog_title": "レイヤ名変更",
   "rename_dialog_label": "新しい名前：",
-
   "log_title": "実行ログ",
   "log_status_no_error": "ログ合計 {total} 行 | エラーなし",
   "log_status_with_error": "ログ合計 {total} 行 | エラー {errors} 件",
   "log_not_found": "ログファイルはまだ生成されていません。プログラムを実行してログ記録をトリガーしてください。",
   "log_read_failed": "ログファイルの読み取りに失敗しました：{error}",
-
   "code_preview_title": "AIコードプレビュー",
   "code_preview_prompt_group": "ユーザー命令",
   "code_preview_code_group": "AI生成PyQGISコード",
@@ -176,14 +155,12 @@
   "code_preview_cancel": "実行キャンセル",
   "code_preview_confirm": "実行確認",
   "code_preview_copied": "コードをクリップボードにコピーしました。",
-
   "attr_table_title": "属性テーブル - {name}",
   "attr_table_layer": "レイヤ：{name}",
   "attr_table_info": "フィーチャ：{features}  |  フィールド：{fields}",
   "attr_table_close": "閉じる",
   "attr_table_records": "合計 {total} 件のレコード",
   "attr_table_overflow": "{loaded} / {total} 件のレコードを読み込みました（50000件制限超過）",
-
   "api_config_title": "AI API設定",
   "api_config_api_group": "DeepSeek API設定",
   "api_config_api_key": "API Key:",
@@ -197,41 +174,33 @@
   "api_config_validate_empty_model": "モデル名は必須です。",
   "api_config_validate_url_format": "Base URL は http:// または https:// で始まる必要があります。",
   "api_config_validate_failed": "検証失敗",
-
   "lang_label": "言語：",
-
   "group_vector_title": "ベクタ一括処理",
   "group_raster_title": "ラスタ地形解析",
   "btn_collapse": "グループを折りたたむ",
   "btn_expand": "グループを展開",
-
   "menu_save_project": "保存(&S)",
   "menu_save_as": "名前を付けて保存(&A)...",
   "menu_import_export": "インポート/エクスポート",
   "menu_export_map_image": "地図を画像としてエクスポート...",
   "menu_export_layer": "レイヤをエクスポート...",
   "menu_import_layer": "レイヤをインポート...",
-
   "ai_placeholder_offline_local": "オフライン — 自然言語で指示（ローカルLLM）...",
   "err_local_llm_connection": "ローカルLLMに接続できません。Ollama/LM Studio が起動しているか確認してください。",
   "err_local_llm_timeout": "ローカルLLMがタイムアウトしました。質問を簡略化するか、より高速なモデルをお試しください。",
   "err_local_llm_unknown": "ローカルLLMの呼び出しに失敗しました",
   "msg_local_llm_loading": "ローカルLLMの応答を待っています...",
-
   "menu_cleanup": "クリーンアップ",
   "menu_cleanup_tip": "user_data内の全一時ファイルを削除",
-
   "btn_cleanup": "クリーンアップ",
   "cleanup_confirm_title": "クリーンアップ確認",
   "cleanup_confirm_msg": "user_data 内の一時ファイル、エクスポート、キャッシュをすべて削除します。この操作は元に戻せません。続行しますか？",
   "cleanup_done": "クリーンアップ完了、{size} MB を解放しました",
   "cleanup_nothing": "削除するファイルはありません",
-
   "tool_select": "選択",
   "tool_select_tip": "地物選択 — 地図上で矩形をドラッグして地物を選択",
   "tool_edit": "編集",
   "tool_edit_tip": "現在のベクタレイヤの編集状態を切替",
-
   "menu_export_attribute": "属性テーブルをエクスポート(&E)...",
   "menu_load_style": "スタイルファイルを読み込む(&L)...",
   "menu_full_extent": "全図表示(&F)",
@@ -240,7 +209,6 @@
   "menu_layer_statistic": "地物統計(&S)...",
   "menu_create_buffer": "バッファ分析(&B)...",
   "menu_batch_style": "一括スタイル設定(&Y)...",
-
   "context_menu_toggle_edit": "編集の開始/停止",
   "context_menu_layer_style": "レイヤスタイル設定",
   "context_menu_labels": "ラベル表示/非表示",
@@ -248,7 +216,18 @@
   "context_menu_field_manager": "フィールド管理",
   "context_menu_export_attribute": "属性テーブルをエクスポート",
   "context_menu_statistic": "地物統計",
-
   "dialog_title_filter": "属性フィルタ設定",
-  "dialog_label_filter": "SQL式（空欄でフィルタ解除）："
+  "dialog_label_filter": "SQL式（空欄でフィルタ解除）：",
+  "mode_hybrid": "ハイブリッド",
+  "mode_hybrid_tooltip": "ハイブリッドモード：ローカルモデル優先、ローカルで処理できない場合のみ指示テキストをクラウドに送信",
+  "status_hybrid": "ハイブリッド — ローカル優先",
+  "status_hybrid_switched": "ハイブリッドモードに切り替えました。ローカル優先、失敗時は指示テキストのみクラウドに送信します。",
+  "risk_title_hybrid": "ハイブリッドモード — データリスク警告",
+  "risk_body_hybrid": "ローカルモデルが優先処理します。ローカルで処理できない場合、「指示テキスト」のみがクラウドの大規模モデルに送信されます（レイヤー名・フィールド名・地名などのメタデータを含む可能性があります）。座標・属性などのデータ本体は常に本機から出ません。",
+  "risk_tip_hybrid": "推奨データ：中程度の機密データ。政府の防災機密や個人情報を含むデータには不適切です。",
+  "risk_title_online": "オンラインモード — データリスク警告",
+  "risk_body_online": "指示とコンテキストはすべてクラウドの大規模モデルに送信されます。機密データは処理しないでください。",
+  "risk_tip_online": "推奨データ：公開データ・匿名化済みデータ・デモデータのみ。",
+  "risk_continue": "切り替える",
+  "risk_cancel": "キャンセル"
 }

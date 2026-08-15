@@ -1,15 +1,12 @@
 {
   "window_title": "AI-Powered Lightweight Desktop GIS",
-
   "mode_label": "Mode:",
   "mode_online": "Online Mode",
   "mode_offline": "Offline Mode",
   "mode_online_tooltip": "Online Mode: Launch AI natural language analysis engine with cloud LLM support",
   "mode_offline_tooltip": "Offline Mode: Run disconnected, only local quick workflow buttons available",
-
   "status_online": "Online — AI Engine Available",
   "status_offline": "Offline — Local Quick Workflows Only",
-
   "menu_file": "File(&F)",
   "menu_new_project": "New Project(&N)",
   "menu_close_project": "Close Project(&C)",
@@ -24,7 +21,6 @@
   "menu_help": "Help(&H)",
   "menu_view_log": "View Log(&L)...",
   "menu_about": "About AIQGIS(&A)",
-
   "toolbar_title": "Map Tools",
   "tool_pan": "Pan",
   "tool_zoom_in": "Zoom In",
@@ -32,41 +28,33 @@
   "tool_pan_tip": "Enable map panning (hold left mouse button to drag)",
   "tool_zoom_in_tip": "Enable box zoom in (hold left mouse button to drag a rectangle)",
   "tool_zoom_out_tip": "Enable box zoom out (click map or drag a rectangle)",
-
   "sidebar_title": "Layers",
   "btn_remove_layer": "Remove Layer",
   "btn_zoom_layer": "Zoom to Layer",
   "btn_remove_tip": "Remove selected layer from project (does not delete file)",
   "btn_zoom_tip": "Zoom map to the extent of the selected layer",
-
   "canvas_tooltip": "Drag and drop SHP, GeoJSON, TIF and other layer files here to load.",
   "canvas_status": "QGIS environment is not properly initialized.",
-
   "ai_placeholder_online": "Enter natural language spatial analysis command, e.g.: \"Create a 30-meter buffer for the current layer\"",
   "ai_placeholder_offline": "Offline Mode — Only quick workflow buttons available",
   "ai_tooltip": "AI will convert natural language commands into PyQGIS processing code and execute automatically.",
   "ai_response_placeholder": "AI response will appear here...",
   "ai_response_tooltip": "Raw response content from AI",
-
   "btn_run_ai": "Run AI Analysis",
   "btn_screenshot": "Canvas Screenshot Analysis",
   "btn_run_tip": "Execute current AI geospatial analysis command",
   "btn_screenshot_tip": "Capture current canvas and execute command based on visual analysis",
-
   "label_shortcuts": "Quick Workflows:",
-
   "btn_cadastral": "1. Cadastral Standardization",
   "btn_hydrology": "2. DEM Hydrology Analysis",
   "btn_batch_clip": "3. Batch Clip & Project",
   "btn_attribute_batch": "4. Batch Attribute Processing",
   "btn_thematic_map": "5. Batch Thematic Map Export",
-
   "tip_cadastral": "Batch convert layers to JGD2000 → Topology check & fix → Attribute normalization → Export standard SHP",
   "tip_hydrology": "Fill sinks → D8 flow direction → Flow accumulation → Stream network extraction → Gully density statistics",
   "tip_batch_clip": "Batch load multiple layers → Boundary clip → Unified JGD2000 → Categorized archive",
   "tip_attribute_batch": "Conditional filtering → Batch field assignment → Export SHP",
   "tip_thematic_map": "Legend/Scale/North arrow → Unified style rendering → Batch PNG/PDF",
-
   "status_ready": "System ready. Drag and drop SHP, GeoJSON, TIF and other layer files onto the map canvas.",
   "status_offline_switched": "Switched to Offline Mode. Only quick workflow buttons can be used.",
   "status_online_switched": "Switched to Online Mode. AI natural language engine is enabled.",
@@ -102,12 +90,10 @@
   "status_heal_retry": "Auto-healing (attempt {current}/{max})...",
   "status_heal_failed": "Auto-healing failed",
   "status_project_saved": "AIQGIS has auto-generated a high-quality map! Double-click the project file to open for layout and printing.",
-
   "pipeline_prefix": "[Offline] Running: {name}...",
   "pipeline_complete": "\nOffline quick workflow completed!\n",
   "pipeline_output_dir": "Output directory: {dir}",
   "pipeline_all_done": "Composite task pipeline fully completed ({total} step(s) total)",
-
   "msgbox_title_offline": "Offline Mode",
   "msgbox_title_missing_instruction": "Missing Analysis Command",
   "msgbox_title_missing_layer": "Missing Layer Data",
@@ -133,7 +119,6 @@
   "msgbox_title_workflow_unknown": "Unknown Workflow",
   "msgbox_title_workflow_load_failed": "Load Failed",
   "msgbox_title_offline_error": "Offline Workflow Error",
-
   "msg_offline_blocked": "Currently in Offline Mode. Only quick workflow buttons can be used.\nUse the Quick Workflow buttons below, or switch to Online Mode.",
   "msg_missing_instruction": "Please enter a geospatial analysis command before running.",
   "msg_missing_layer": "No analyzable layers available. Please drag and drop at least one layer first.",
@@ -142,29 +127,23 @@
   "msg_select_layer_first": "Please select a layer in the layer list first.",
   "msg_api_saved": "API configuration updated. New settings will be used for the next analysis.",
   "msg_save_failed": "Unable to save configuration: {error}",
-
   "about_title": "About AIQGIS",
   "about_text": "<h2>AIQGIS</h2><p>AI-Powered Lightweight Desktop GIS Application</p><p>Version 0.2.0</p><p>Powered by PyQGIS + DeepSeek</p><p>Open Source Project - GitHub</p>",
-
   "layer_type_vector": "Vector Layer",
   "layer_type_raster": "Raster Layer",
   "layer_type_unknown": "Unknown Type",
-
   "context_menu_attr_table": "View Attribute Table",
   "context_menu_zoom": "Zoom to Layer",
   "context_menu_rename": "Rename Layer",
   "context_menu_copy": "Copy Layer",
   "context_menu_remove": "Remove Layer",
-
   "rename_dialog_title": "Rename Layer",
   "rename_dialog_label": "New name:",
-
   "log_title": "Runtime Log",
   "log_status_no_error": "Total {total} lines in log | No errors",
   "log_status_with_error": "Total {total} lines in log | {errors} error(s)",
   "log_not_found": "Log file has not been generated yet. Please run the program to trigger log recording.",
   "log_read_failed": "Failed to read log file: {error}",
-
   "code_preview_title": "AI Code Preview",
   "code_preview_prompt_group": "User Command",
   "code_preview_code_group": "AI-Generated PyQGIS Code",
@@ -176,14 +155,12 @@
   "code_preview_cancel": "Cancel Execution",
   "code_preview_confirm": "Confirm Execution",
   "code_preview_copied": "Code copied to clipboard.",
-
   "attr_table_title": "Attribute Table - {name}",
   "attr_table_layer": "Layer: {name}",
   "attr_table_info": "Features: {features}  |  Fields: {fields}",
   "attr_table_close": "Close",
   "attr_table_records": "Total {total} record(s)",
   "attr_table_overflow": "Loaded {loaded} / {total} record(s) (exceeded 50,000 limit)",
-
   "api_config_title": "AI API Configuration",
   "api_config_api_group": "DeepSeek API Settings",
   "api_config_api_key": "API Key:",
@@ -197,41 +174,33 @@
   "api_config_validate_empty_model": "Model name cannot be empty.",
   "api_config_validate_url_format": "Base URL must start with http:// or https://.",
   "api_config_validate_failed": "Validation Failed",
-
   "lang_label": "Language:",
-
   "group_vector_title": "Vector Batch",
   "group_raster_title": "Raster Terrain",
   "btn_collapse": "Collapse group",
   "btn_expand": "Expand group",
-
   "menu_save_project": "Save(&S)",
   "menu_save_as": "Save As(&A)...",
   "menu_import_export": "Import/Export",
   "menu_export_map_image": "Export Map as Image...",
   "menu_export_layer": "Export Layer...",
   "menu_import_layer": "Import Layer...",
-
   "ai_placeholder_offline_local": "Offline — Type natural language commands (Local LLM)...",
   "err_local_llm_connection": "Cannot connect to local LLM. Please ensure Ollama/LM Studio is running.",
   "err_local_llm_timeout": "Local LLM timed out. Try simplifying your query or using a faster model.",
   "err_local_llm_unknown": "Local LLM call failed",
   "msg_local_llm_loading": "Waiting for local LLM response...",
-
   "menu_cleanup": "Clean Up",
   "menu_cleanup_tip": "Clear all temporary files under user_data",
-
   "btn_cleanup": "Clean Up",
   "cleanup_confirm_title": "Confirm Cleanup",
   "cleanup_confirm_msg": "All temporary files, exports, and caches in user_data will be deleted. This cannot be undone. Continue?",
   "cleanup_done": "Cleanup complete, freed {size} MB",
   "cleanup_nothing": "Nothing to clean",
-
   "tool_select": "Select",
   "tool_select_tip": "Select features — drag a rectangle on the map to select features",
   "tool_edit": "Edit",
   "tool_edit_tip": "Toggle editing state of current vector layer",
-
   "menu_export_attribute": "Export Attribute Table(&E)...",
   "menu_load_style": "Load Style File(&L)...",
   "menu_full_extent": "Full Extent(&F)",
@@ -240,7 +209,6 @@
   "menu_layer_statistic": "Layer Statistics(&S)...",
   "menu_create_buffer": "Buffer Analysis(&B)...",
   "menu_batch_style": "Batch Style Setting(&Y)...",
-
   "context_menu_toggle_edit": "Toggle Editing",
   "context_menu_layer_style": "Layer Style Settings",
   "context_menu_labels": "Show/Hide Labels",
@@ -248,7 +216,18 @@
   "context_menu_field_manager": "Field Manager",
   "context_menu_export_attribute": "Export Attribute Table",
   "context_menu_statistic": "Layer Statistics",
-
   "dialog_title_filter": "Set Attribute Filter",
-  "dialog_label_filter": "SQL Expression (leave empty to clear filter):"
+  "dialog_label_filter": "SQL Expression (leave empty to clear filter):",
+  "mode_hybrid": "Hybrid",
+  "mode_hybrid_tooltip": "Hybrid mode: local model first; only instruction text goes to cloud when local fails",
+  "status_hybrid": "Hybrid — Local First",
+  "status_hybrid_switched": "Switched to hybrid mode. Local model first; only instruction text upgrades to cloud on failure.",
+  "risk_title_hybrid": "Hybrid Mode — Data Risk Notice",
+  "risk_body_hybrid": "The local model processes first; when it cannot complete, only the \"instruction text\" is sent to the cloud LLM (may include layer names, field names, place names, etc.). Coordinates, attributes and other data itself never leave this machine.",
+  "risk_tip_hybrid": "Recommended data: medium-sensitivity data. Not suitable for government disaster-prevention secrets or data containing personal information.",
+  "risk_title_online": "Online Mode — Data Risk Notice",
+  "risk_body_online": "Your instruction and context will all be sent to the cloud LLM. Do not process any sensitive data.",
+  "risk_tip_online": "Recommended data: public data, anonymized data, or demo data only.",
+  "risk_continue": "Switch Anyway",
+  "risk_cancel": "Cancel"
 }

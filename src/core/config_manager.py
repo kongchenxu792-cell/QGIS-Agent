@@ -99,8 +99,11 @@ class ConfigManager:
 
     @property
     def last_mode(self) -> str:
-        """上次使用的模式：'online' 或 'offline'"""
-        return self._data.get("last_mode", "online")
+        """上次使用的模式：'online'、'offline' 或 'hybrid'（默认 offline）。"""
+        mode = self._data.get("last_mode", "offline")
+        if mode not in ("online", "offline", "hybrid"):
+            mode = "offline"
+        return mode
 
     @last_mode.setter
     def last_mode(self, value: str) -> None:

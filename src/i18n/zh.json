@@ -1,15 +1,12 @@
 {
   "window_title": "AI 驱动轻量桌面 GIS",
-
   "mode_label": "运行模式：",
   "mode_online": "在线模式",
   "mode_offline": "离线模式",
   "mode_online_tooltip": "在线模式：启动 AI 自然语言分析引擎，支持联网 LLM 调用",
   "mode_offline_tooltip": "离线模式：断网运行，仅使用本地快捷流程按钮",
-
   "status_online": "在线 — AI 引擎可用",
   "status_offline": "离线 — 仅本地快捷流程可用",
-
   "menu_file": "文件(&F)",
   "menu_new_project": "新建项目(&N)",
   "menu_close_project": "关闭项目(&C)",
@@ -24,7 +21,6 @@
   "menu_help": "帮助(&H)",
   "menu_view_log": "查看日志(&L)...",
   "menu_about": "关于 AIQGIS(&A)",
-
   "toolbar_title": "地图工具",
   "tool_pan": "平移",
   "tool_zoom_in": "放大",
@@ -32,41 +28,33 @@
   "tool_pan_tip": "启用地图平移（按住鼠标左键拖动）",
   "tool_zoom_in_tip": "启用框选放大（按住鼠标左键拖拽矩形区域）",
   "tool_zoom_out_tip": "启用框选缩小（点击地图或拖拽矩形区域）",
-
   "sidebar_title": "图层列表",
   "btn_remove_layer": "移除图层",
   "btn_zoom_layer": "缩放到图层",
   "btn_remove_tip": "从工程中移除选中的图层（不删除文件）",
   "btn_zoom_tip": "将地图缩放至选中图层的范围",
-
   "canvas_tooltip": "可将 SHP、GeoJSON、TIF 等图层文件拖拽到此处加载。",
   "canvas_status": "QGIS 环境未正确初始化。",
-
   "ai_placeholder_online": "请输入自然语言空间分析指令，例如：\"为当前图层创建 30 米缓冲区\"",
   "ai_placeholder_offline": "离线模式 — 仅可使用快捷流程按钮",
   "ai_tooltip": "AI 会将自然语言指令转换为 PyQGIS 处理代码并自动执行。",
   "ai_response_placeholder": "AI 响应将显示在此处...",
   "ai_response_tooltip": "AI 返回的原始响应内容",
-
   "btn_run_ai": "运行 AI 分析",
   "btn_screenshot": "画布截图分析",
   "btn_run_tip": "执行当前 AI 地理空间分析指令",
   "btn_screenshot_tip": "截取当前画布并基于视觉分析执行指令",
-
   "label_shortcuts": "快捷流程：",
-
   "btn_cadastral": "1. 地籍标准化",
   "btn_hydrology": "2. DEM水文解析",
   "btn_batch_clip": "3. 批量裁剪+投影",
   "btn_attribute_batch": "4. 属性批量处理",
   "btn_thematic_map": "5. 专题图批量输出",
-
   "tip_cadastral": "图层批量转JGD2000 → 拓扑检查修复 → 属性规整 → 导出标准SHP",
   "tip_hydrology": "洼地填充 → D8流向提取 → 汇流累积 → 河网提取 → 沟壑密度统计",
   "tip_batch_clip": "多图层批量加载 → 边界裁剪 → 统一JGD2000 → 分类归档",
   "tip_attribute_batch": "条件筛选 → 字段批量赋值 → 导出SHP",
   "tip_thematic_map": "图例/比例尺/指北针 → 统一样式渲染 → 批量PNG/PDF",
-
   "status_ready": "系统就绪，可将 SHP、GeoJSON、TIF 等图层文件拖拽到地图画布中。",
   "status_offline_switched": "已切换至离线模式。仅可使用快捷流程按钮执行任务。",
   "status_online_switched": "已切换至在线模式。AI 自然语言引擎已启用。",
@@ -102,12 +90,10 @@
   "status_heal_retry": "正在自愈修正（第 {current}/{max} 次）...",
   "status_heal_failed": "自愈修正失败",
   "status_project_saved": "AIQGIS 已自动完成高颜值制图！可直接双击打开工程文件排版打印。",
-
   "pipeline_prefix": "[离线模式] 正在执行：{name}...",
   "pipeline_complete": "\n离线快捷流程执行完成！\n",
   "pipeline_output_dir": "输出目录：{dir}",
   "pipeline_all_done": "复合任务流水线全部完成（共 {total} 步）",
-
   "msgbox_title_offline": "离线模式",
   "msgbox_title_missing_instruction": "缺少分析指令",
   "msgbox_title_missing_layer": "缺少图层数据",
@@ -133,7 +119,6 @@
   "msgbox_title_workflow_unknown": "未知工作流",
   "msgbox_title_workflow_load_failed": "加载失败",
   "msgbox_title_offline_error": "离线流程错误",
-
   "msg_offline_blocked": "当前为离线模式，仅可使用快捷流程按钮执行任务。\n请使用底部「快捷流程」按钮，或切换至在线模式。",
   "msg_missing_instruction": "请输入地理空间分析指令后再运行。",
   "msg_missing_layer": "当前没有可分析的图层，请先拖拽加载至少一个图层。",
@@ -142,29 +127,23 @@
   "msg_select_layer_first": "请先在图层列表中选中一个图层。",
   "msg_api_saved": "API 配置已更新，下次分析将使用新设置。",
   "msg_save_failed": "无法保存配置：{error}",
-
   "about_title": "关于 AIQGIS",
   "about_text": "<h2>AIQGIS</h2><p>AI 驱动轻量桌面 GIS 应用</p><p>版本 0.2.0</p><p>基于 PyQGIS + DeepSeek</p><p>开源项目 - GitHub</p>",
-
   "layer_type_vector": "矢量图层",
   "layer_type_raster": "栅格图层",
   "layer_type_unknown": "未知类型",
-
   "context_menu_attr_table": "查看属性表",
   "context_menu_zoom": "缩放到图层",
   "context_menu_rename": "重命名图层",
   "context_menu_copy": "复制图层",
   "context_menu_remove": "移除图层",
-
   "rename_dialog_title": "重命名图层",
   "rename_dialog_label": "新名称：",
-
   "log_title": "运行日志",
   "log_status_no_error": "日志共 {total} 行 | 无错误",
   "log_status_with_error": "日志共 {total} 行 | 错误 {errors} 条",
   "log_not_found": "日志文件尚未生成。请先运行程序触发一次日志记录。",
   "log_read_failed": "读取日志文件失败：{error}",
-
   "code_preview_title": "AI 代码预览",
   "code_preview_prompt_group": "用户指令",
   "code_preview_code_group": "AI 生成的 PyQGIS 代码",
@@ -176,14 +155,12 @@
   "code_preview_cancel": "取消执行",
   "code_preview_confirm": "确认执行",
   "code_preview_copied": "代码已复制到剪贴板。",
-
   "attr_table_title": "属性表 - {name}",
   "attr_table_layer": "图层：{name}",
   "attr_table_info": "要素：{features}  |  字段：{fields}",
   "attr_table_close": "关闭",
   "attr_table_records": "共 {total} 条记录",
   "attr_table_overflow": "已加载 {loaded} / {total} 条记录（超出 50000 条限制）",
-
   "api_config_title": "AI API 配置",
   "api_config_api_group": "DeepSeek API 设置",
   "api_config_api_key": "API Key:",
@@ -197,27 +174,22 @@
   "api_config_validate_empty_model": "模型名称不能为空。",
   "api_config_validate_url_format": "Base URL 必须以 http:// 或 https:// 开头。",
   "api_config_validate_failed": "验证失败",
-
   "lang_label": "语言：",
-
   "group_vector_title": "矢量批量处理",
   "group_raster_title": "栅格地形分析",
   "btn_collapse": "折叠分组",
   "btn_expand": "展开分组",
-
   "menu_save_project": "保存(&S)",
   "menu_save_as": "另存为(&A)...",
   "menu_import_export": "导入/导出",
   "menu_export_map_image": "导出地图为图片...",
   "menu_export_layer": "导出图层...",
   "menu_import_layer": "导入图层...",
-
   "ai_placeholder_offline_local": "离线模式 — 输入自然语言指令（本地大模型）...",
   "err_local_llm_connection": "无法连接本地大模型。请确保 Ollama/LM Studio 已启动。",
   "err_local_llm_timeout": "本地大模型响应超时。请尝试简化问题或更换更快的模型。",
   "err_local_llm_unknown": "本地大模型调用失败",
   "msg_local_llm_loading": "正在等待本地大模型响应...",
-
   "menu_cleanup": "一键瘦身",
   "menu_cleanup_tip": "清空 user_data 目录下所有临时文件",
   "btn_cleanup": "一键瘦身",
@@ -225,12 +197,10 @@
   "cleanup_confirm_msg": "将清空 user_data 目录下所有临时文件、导出产物和缓存。此操作不可撤销，是否继续？",
   "cleanup_done": "瘦身完成，释放了 {size} MB",
   "cleanup_nothing": "没有需要清理的文件",
-
   "tool_select": "选择",
   "tool_select_tip": "框选要素 — 在地图上拖拽矩形区域选择要素",
   "tool_edit": "编辑",
   "tool_edit_tip": "切换当前矢量图层的编辑状态",
-
   "menu_export_attribute": "导出属性表(&E)...",
   "menu_load_style": "加载样式文件(&L)...",
   "menu_full_extent": "全图显示(&F)",
@@ -239,7 +209,6 @@
   "menu_layer_statistic": "要素统计(&S)...",
   "menu_create_buffer": "缓冲区分析(&B)...",
   "menu_batch_style": "批量样式设置(&Y)...",
-
   "context_menu_toggle_edit": "开启/关闭编辑",
   "context_menu_layer_style": "图层样式设置",
   "context_menu_labels": "显示/隐藏标注",
@@ -247,7 +216,18 @@
   "context_menu_field_manager": "字段管理",
   "context_menu_export_attribute": "导出属性表",
   "context_menu_statistic": "要素统计",
-
   "dialog_title_filter": "设置属性过滤",
-  "dialog_label_filter": "SQL 表达式（留空清除过滤）："
+  "dialog_label_filter": "SQL 表达式（留空清除过滤）：",
+  "mode_hybrid": "混动模式",
+  "mode_hybrid_tooltip": "混动模式：本地模型优先，本地无法完成时仅指令文本上传云端",
+  "status_hybrid": "混动 — 本地优先",
+  "status_hybrid_switched": "已切换至混动模式。本地模型优先，失败时仅指令文本升级云端。",
+  "risk_title_hybrid": "混动模式 — 数据风险提醒",
+  "risk_body_hybrid": "本地模型优先处理；当本地无法完成时，仅「指令文本」会上传云端大模型（可能包含图层名、字段名、地名等元数据）。坐标、属性等数据本体始终不出本机。",
+  "risk_tip_hybrid": "数据类型建议：适合中等敏感数据；不适合政府防灾机密、含个人信息的数据。",
+  "risk_title_online": "在线模式 — 数据风险提醒",
+  "risk_body_online": "指令与上下文将全部上传云端大模型。请勿处理任何敏感数据。",
+  "risk_tip_online": "数据类型建议：仅适合公开数据、已脱敏数据、演示数据。",
+  "risk_continue": "继续切换",
+  "risk_cancel": "取消"
 }
