@@ -24,6 +24,7 @@ def make_mock_qgis_layer(name, geom_type=0, crs_authid="EPSG:3857", feature_coun
     layer = MagicMock()
     layer.name.return_value = name
     layer.isValid.return_value = True
+    layer.type.return_value = 0  # QgsMapLayer.VectorLayer（P2-0 source_is_vector 真实检查需要）
     layer.featureCount.return_value = feature_count
     layer.geometryType.return_value = geom_type
     layer.wkbType.return_value = 1  # Point

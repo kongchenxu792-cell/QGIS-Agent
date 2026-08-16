@@ -41,12 +41,13 @@
       "comment": "行政区边界图层（可选，用于裁剪到想定区划内）"
     }
   ],
+  "guards_on_fail": "error",
   "guards": [
-    {"condition": "crs_projected"},
-    {"condition": "intensity_is_polygon"},
-    {"condition": "population_is_polygon"},
-    {"condition": "shapely_available"},
-    {"condition": "crs_match", "params": {"auto_reproject": true}}
+    {"condition": "crs_projected", "on_fail": "error"},
+    {"condition": "intensity_is_polygon", "on_fail": "error"},
+    {"condition": "population_is_polygon", "on_fail": "error"},
+    {"condition": "shapely_available", "on_fail": "error"},
+    {"condition": "crs_match", "params": {"auto_reproject": true}, "on_fail": "error"}
   ],
   "steps": [
     {

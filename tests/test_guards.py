@@ -18,6 +18,7 @@ from src.core.guards import (
     GuardResult,
     GuardReport,
     GUARD_REGISTRY,
+    _guard_source_is_vector,
     _guard_source_is_point,
     _guard_boundary_is_polygon,
     _guard_crs_projected,
@@ -120,14 +121,20 @@ class TestGuards(unittest.TestCase):
         result = _guard_crs_match(params_map, guard_def)
         self.assertFalse(result.passed)
 
-    def test_crs_match_skipped_with_auto_reproject(self):
+    def test_crs_match_auto_reproject_failure_fails_closed(self):
+        """auto_reproject=true 但重投影失败时显式 failed（fail-closed，禁止静默跳过）。
+
+        baseline 旧测试断言 auto_skipped=True 跳过；实现已演进为真实重投影，
+        mock 图层无法完成重投影 → 必须 failed 且带诊断信息。
+        """
         source = make_mock_layer(crs_authid="EPSG:3857")
         boundary = make_mock_layer(crs_authid="EPSG:4326")
         params_map = {"source_layer": source, "boundary_layer": boundary}
         guard_def = GuardDef(condition="crs_match", params={"auto_reproject": True})
         result = _guard_crs_match(params_map, guard_def)
-        self.assertTrue(result.passed)
-        self.assertTrue(result.auto_skipped)
+        self.assertFalse(result.passed)
+        self.assertFalse(result.auto_skipped)
+        self.assertIn("重投影失败", result.message)
 
     # ── boundary_fc_limit ───────────────────────────────────
 
@@ -146,6 +153,108 @@ class TestGuards(unittest.TestCase):
         guard_def = GuardDef(condition="boundary_fc_limit", params={"max": 10000})
         result = _guard_boundary_fc_limit(params_map, guard_def)
         self.assertFalse(result.passed)
+
+    # ── source_is_vector（P2-0 补全真实检查）──────────────
+
+    def test_source_is_vector_passes_for_vector(self):
+        layer = make_mock_layer(geom_type=0)
+        layer.type.return_value = 0  # QgsMapLayer.VectorLayer
+        params_map = {"source_layer": layer}
+        guard_def = GuardDef(condition="source_is_vector")
+        result = _guard_source_is_vector(params_map, guard_def)
+        self.assertTrue(result.passed)
+
+    def test_source_is_vector_rejects_raster(self):
+        layer = make_mock_layer(geom_type=0)
+        layer.type.return_value = 1  # QgsMapLayer.RasterLayer
+        params_map = {"source_layer": layer}
+        guard_def = GuardDef(condition="source_is_vector")
+        result = _guard_source_is_vector(params_map, guard_def)
+        self.assertFalse(result.passed)
+        self.assertIn("栅格", result.message)
+
+    def test_source_is_vector_rejects_none(self):
+        params_map = {"source_layer": None}
+        guard_def = GuardDef(condition="source_is_vector")
+        result = _guard_source_is_vector(params_map, guard_def)
+        self.assertFalse(result.passed)
+        self.assertIn("不存在", result.message)
+
+    def test_source_is_vector_rejects_object_without_type(self):
+        params_map = {"source_layer": object()}
+        guard_def = GuardDef(condition="source_is_vector")
+        result = _guard_source_is_vector(params_map, guard_def)
+        self.assertFalse(result.passed)
+        self.assertIn("不是有效 QgsVectorLayer", result.message)
+
+    # ── 未知守卫条件（P2-0 fail-closed）──────────────────
+
+    def test_unknown_guard_fails_closed(self):
+        checker = GuardChecker({})
+        guard_def = GuardDef(condition="no_such_guard")
+        result = checker._check_one(guard_def)
+        self.assertFalse(result.passed)
+        self.assertEqual(result.message, "未知守卫条件 'no_such_guard'")
+
+    def test_unknown_guard_in_check_report(self):
+        checker = GuardChecker({})
+        report = checker.check(GuardCheck(guards=[GuardDef(condition="no_such_guard")]))
+        self.assertFalse(report.all_passed)
+        self.assertEqual(len(report.failed), 1)
+        self.assertTrue(report.blocking_failed[0].blocking)
+
+    # ── on_fail 默认值（P2-0 fail-closed）────────────────
+
+    def test_guard_check_on_fail_defaults_to_error(self):
+        guard_check = GuardCheck()
+        self.assertEqual(guard_check.on_fail, "error")
+
+    def test_guard_def_on_fail_defaults_empty(self):
+        guard_def = GuardDef(condition="crs_projected")
+        self.assertEqual(guard_def.on_fail, "")
+
+    # ── blocking 判定（模板级 + 守卫级覆盖）─────────────
+
+    def test_checker_blocking_uses_template_on_fail(self):
+        source = make_mock_layer(geom_type=2, crs_authid="EPSG:3857")  # 面图层，非点
+        params_map = {"source_layer": source}
+        # 模板级 error → 失败即阻断
+        guard_check = GuardCheck(
+            guards=[GuardDef(condition="source_is_point", params={"geometry_type": 0})],
+            on_fail="error",
+        )
+        report = GuardChecker(params_map).check(guard_check)
+        self.assertFalse(report.all_passed)
+        self.assertEqual(len(report.blocking_failed), 1)
+
+    def test_checker_blocking_uses_guard_level_override(self):
+        source = make_mock_layer(geom_type=2, crs_authid="EPSG:3857")  # 面图层，非点
+        params_map = {"source_layer": source}
+        # 守卫级 on_fail="warn" 覆盖模板级 error → 失败但不阻断
+        guard_check = GuardCheck(
+            guards=[GuardDef(condition="source_is_point",
+                             params={"geometry_type": 0}, on_fail="warn")],
+            on_fail="error",
+        )
+        report = GuardChecker(params_map).check(guard_check)
+        self.assertFalse(report.all_passed)
+        self.assertEqual(len(report.failed), 1)
+        self.assertEqual(len(report.blocking_failed), 0)
+
+    def test_checker_warn_level_failure_not_blocking(self):
+        layer = make_mock_layer()
+        layer.featureCount.return_value = 15000  # 超过 10000 上限
+        params_map = {"boundary_layer": layer}
+        # boundary_fc_limit 在模板中声明为 warn
+        guard_check = GuardCheck(
+            guards=[GuardDef(condition="boundary_fc_limit",
+                             params={"max": 10000}, on_fail="warn")],
+            on_fail="error",
+        )
+        report = GuardChecker(params_map).check(guard_check)
+        self.assertFalse(report.all_passed)
+        self.assertEqual(len(report.failed), 1)
+        self.assertEqual(len(report.blocking_failed), 0)
 
     # ── GuardChecker.execute() 集成 ────────────────────────
 

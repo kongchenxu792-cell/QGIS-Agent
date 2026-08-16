@@ -15,16 +15,21 @@ from typing import Any, Callable, Dict, List
 
 @dataclass
 class GuardDef:
-    """单条前置守卫条件。"""
+    """单条前置守卫条件。
+
+    on_fail 为空字符串时跟随模板级 guards_on_fail；
+    显式声明 "error" / "warn" 时覆盖模板级（单条覆盖）。
+    """
     condition: str                       # crs_projected | source_is_vector | source_is_point | ...
     params: Dict[str, Any] = field(default_factory=dict)
+    on_fail: str = ""                    # ""=跟随模板级 | "error" | "warn"
 
 
 @dataclass
 class GuardCheck:
-    """模板级 guards 声明。"""
+    """模板级 guards 声明（fail-closed：缺省 on_fail="error"）。"""
     guards: List[GuardDef] = field(default_factory=list)
-    on_fail: str = "warn"               # "warn" | "error"
+    on_fail: str = "error"              # "warn" | "error"
 
 
 @dataclass
@@ -34,6 +39,7 @@ class GuardResult:
     passed: bool
     message: str = ""                   # 失败时的诊断信息
     auto_skipped: bool = False          # 被 auto_reproject 等机制跳过
+    blocking: bool = True               # fail-closed：是否阻断执行（on_fail=="error" 时为 True）
 
 
 @dataclass
@@ -46,13 +52,63 @@ class GuardReport:
     def failed(self) -> List[GuardResult]:
         return [r for r in self.results if not r.passed and not r.auto_skipped]
 
+    @property
+    def blocking_failed(self) -> List[GuardResult]:
+        """失败且需阻断执行的守卫（on_fail 判定为 "error"）。"""
+        return [r for r in self.results if not r.passed and not r.auto_skipped and r.blocking]
+
 
 # ── 守卫函数（统一签名：(params_map, guard_def) → GuardResult）─
 
 def _guard_source_is_vector(params_map: Dict[str, Any],
                             guard_def: GuardDef) -> GuardResult:
-    """源图层必须为矢量类型（默认通过，名称占位）。"""
-    return GuardResult(condition=guard_def.condition, passed=True)
+    """源图层必须存在且为矢量图层（fail-closed：栅格/None/未知 → failed 并报具体原因）。
+
+    P2-0 修复：原实现为空壳永远 passed，外部评审 P0-1 定性。
+    现在检查 source_layer 是否存在，并通过 QGIS 原生 type() 接口
+    区分矢量 / 栅格 / 其他类型；无 QGIS 环境时使用 QGIS 3.x 稳定常量。
+    """
+    source = params_map.get("source_layer")
+    if source is None:
+        return GuardResult(
+            condition=guard_def.condition, passed=False,
+            message="源图层不存在（source_layer 未提供或未匹配到图层）"
+        )
+
+    # QGIS 图层类型常量（QGIS 3.x 稳定值：VectorLayer=0, RasterLayer=1）
+    try:
+        from qgis.core import QgsMapLayer
+        vector_type = QgsMapLayer.VectorLayer
+        raster_type = QgsMapLayer.RasterLayer
+    except ImportError:
+        vector_type, raster_type = 0, 1
+
+    # 优先 QGIS 原生 type() 接口（真实图层与测试 mock 均可用）
+    if hasattr(source, "type"):
+        try:
+            layer_type = source.type()
+        except Exception as e:
+            return GuardResult(
+                condition=guard_def.condition, passed=False,
+                message=f"源图层 type() 检查异常: {e}"
+            )
+        if layer_type == vector_type:
+            return GuardResult(condition=guard_def.condition, passed=True)
+        if layer_type == raster_type:
+            return GuardResult(
+                condition=guard_def.condition, passed=False,
+                message=f"源图层为栅格图层（type()={layer_type}），需要矢量图层"
+            )
+        return GuardResult(
+            condition=guard_def.condition, passed=False,
+            message=f"源图层类型不支持（type()={layer_type}），需要矢量图层"
+        )
+
+    # 无 type() 接口的对象 → 按无效处理（fail-closed，不再默认通过）
+    return GuardResult(
+        condition=guard_def.condition, passed=False,
+        message=f"源图层不是有效 QgsVectorLayer（对象类型={type(source).__name__}）"
+    )
 
 
 def _guard_source_is_point(params_map: Dict[str, Any],
@@ -265,13 +321,19 @@ class GuardChecker:
         self.params_map = params_map
 
     def check(self, guard_check: GuardCheck) -> GuardReport:
-        """遍历所有守卫条件并返回汇总报告。"""
+        """遍历所有守卫条件并返回汇总报告。
+
+        fail-closed：逐条判定 effective on_fail（守卫级覆盖模板级，
+        未声明时跟随模板级），决定该条失败是否阻断执行。
+        """
         if not guard_check or not guard_check.guards:
             return GuardReport(all_passed=True)
 
         results: List[GuardResult] = []
         for guard_def in guard_check.guards:
             result = self._check_one(guard_def)
+            effective_on_fail = guard_def.on_fail or guard_check.on_fail
+            result.blocking = (effective_on_fail == "error")
             results.append(result)
 
         all_passed = all(r.passed for r in results)
@@ -280,8 +342,9 @@ class GuardChecker:
     def _check_one(self, guard_def: GuardDef) -> GuardResult:
         func = GUARD_REGISTRY.get(guard_def.condition)
         if func is None:
+            # P2-0 fail-closed：未知守卫条件不再默认通过
             return GuardResult(
-                condition=guard_def.condition, passed=True,
-                message=f"未知守卫条件 '{guard_def.condition}'，默认通过"
+                condition=guard_def.condition, passed=False,
+                message=f"未知守卫条件 '{guard_def.condition}'"
             )
         return func(self.params_map, guard_def)

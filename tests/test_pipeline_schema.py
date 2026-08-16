@@ -136,6 +136,78 @@ class TestPipelineSchema(unittest.TestCase):
         self.assertIn("source_is_point", guard_conditions)
         self.assertIn("boundary_is_polygon", guard_conditions)
 
+    # ── guards_on_fail 解析（P2-0 fail-closed）─────────────
+
+    def test_guards_on_fail_parsed_from_template(self):
+        """模板顶层 guards_on_fail 应被解析到 GuardCheck.on_fail。"""
+        self.assertEqual(self.template.guards.on_fail, "error")
+
+    def test_guards_guard_level_on_fail_parsed(self):
+        """每个守卫的 on_fail 字段应被解析到 GuardDef.on_fail。"""
+        by_condition = {g.condition: g for g in self.template.guards.guards}
+        self.assertEqual(by_condition["crs_projected"].on_fail, "error")
+        self.assertEqual(by_condition["source_is_vector"].on_fail, "error")
+        # boundary_fc_limit 为性能软上限 → warn
+        self.assertEqual(by_condition["boundary_fc_limit"].on_fail, "warn")
+        self.assertEqual(by_condition["crs_match"].on_fail, "error")
+
+    def test_guards_on_fail_defaults_error_when_missing(self):
+        """缺省 guards_on_fail 时应为 error（fail-closed）。"""
+        raw = {
+            "action": "test",
+            "guards": [
+                {"condition": "crs_projected"},
+            ],
+            "steps": [],
+        }
+        import tempfile, os
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False,
+                                         encoding="utf-8") as f:
+            json.dump(raw, f, ensure_ascii=False)
+            tmp_path = f.name
+        try:
+            executor = PipelineExecutor()
+            template = executor._parse_template(tmp_path)
+            self.assertIsNotNone(template.guards)
+            self.assertEqual(template.guards.on_fail, "error")
+        finally:
+            os.unlink(tmp_path)
+
+    def test_guards_on_fail_invalid_value_falls_back_error(self):
+        """非法 guards_on_fail 值应回退到 error。"""
+        raw = {
+            "action": "test",
+            "guards_on_fail": "banana",
+            "guards": [{"condition": "crs_projected"}],
+            "steps": [],
+        }
+        import tempfile, os
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False,
+                                         encoding="utf-8") as f:
+            json.dump(raw, f, ensure_ascii=False)
+            tmp_path = f.name
+        try:
+            executor = PipelineExecutor()
+            template = executor._parse_template(tmp_path)
+            self.assertEqual(template.guards.on_fail, "error")
+        finally:
+            os.unlink(tmp_path)
+
+    def test_all_four_templates_declare_guards_on_fail(self):
+        """4 个模板必须显式声明 guards_on_fail 字段（P2-0 交付要求）。"""
+        templates_dir = Path(__file__).resolve().parent.parent / "src" / "core" / "templates"
+        names = ["coverage_analysis", "gap_analysis", "population_coverage", "building_risk"]
+        for name in names:
+            with self.subTest(template=name):
+                with open(templates_dir / f"{name}.json", "r", encoding="utf-8") as f:
+                    raw = json.load(f)
+                self.assertIn("guards_on_fail", raw, f"{name}.json 缺少 guards_on_fail")
+                self.assertEqual(raw["guards_on_fail"], "error")
+                # 每个守卫都必须显式声明 on_fail
+                for g in raw.get("guards", []):
+                    self.assertIn("on_fail", g, f"{name}.json 守卫 {g.get('condition')} 缺少 on_fail")
+                    self.assertIn(g["on_fail"], ("error", "warn"))
+
 
 if __name__ == "__main__":
     unittest.main()

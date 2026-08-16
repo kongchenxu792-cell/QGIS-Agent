@@ -253,8 +253,17 @@ class PipelineExecutor:
                 self.params_map["population_field"] = population_field
 
         guard_ok = self._check_guards()
-        if not guard_ok and self.template.guards and self.template.guards.on_fail == "error":
-            return {"success": False, "message": "Guard check failed"}
+        if not guard_ok:
+            # fail-closed：_check_guards 已按 effective on_fail（模板级 + 守卫级覆盖）
+            # 判定是否阻断；此处补充失败明细便于端到端诊断
+            detail = ""
+            report = getattr(self, "_last_guard_report", None)
+            if report is not None and report.blocking_failed:
+                detail = " | ".join(
+                    f"{r.condition}: {r.message}" for r in report.blocking_failed
+                )
+            message = f"Guard check failed: {detail}" if detail else "Guard check failed"
+            return {"success": False, "message": message}
 
         # step_outputs: {step_id → resolved output, "$source_layer" → layer, ...}
         step_outputs: Dict[str, Any] = {
@@ -433,7 +442,8 @@ class PipelineExecutor:
         params = [ParamDef(**{k: v for k, v in p.items() if k in ParamDef.__dataclass_fields__})
                    for p in raw.get("params", [])]
 
-        # guards: 顶层列表 [{condition, params}, ...]
+        # guards: 顶层列表 [{condition, params, on_fail?}, ...]
+        # 顶层 guards_on_fail: "error" | "warn"（P2-0 fail-closed，缺省 "error"）
         guards = None
         if "guards" in raw and raw["guards"]:
             guard_list = []
@@ -441,9 +451,17 @@ class PipelineExecutor:
                 gd = GuardDef(
                     condition=g.get("condition", ""),
                     params=g.get("params", {}),
+                    on_fail=g.get("on_fail", ""),
                 )
                 guard_list.append(gd)
-            guards = GuardCheck(guards=guard_list)
+            template_on_fail = raw.get("guards_on_fail", "error")
+            if template_on_fail not in ("error", "warn"):
+                _log.warning(
+                    "_parse_template: 非法 guards_on_fail=%r，使用缺省 'error'",
+                    template_on_fail,
+                )
+                template_on_fail = "error"
+            guards = GuardCheck(guards=guard_list, on_fail=template_on_fail)
 
         # steps
         steps = []
@@ -519,7 +537,23 @@ class PipelineExecutor:
             return True
         checker = GuardChecker(self.params_map)
         report = checker.check(self.template.guards)
-        if not report.all_passed and self.template.guards.on_fail == "error":
+        # P2-0：守卫失败报告写日志（逐条件 passed/failed + message）
+        self._last_guard_report = report
+        for r in report.results:
+            if r.auto_skipped:
+                _log.info("[guards] condition=%s auto_skipped: %s", r.condition, r.message)
+            elif r.passed:
+                _log.info("[guards] condition=%s passed", r.condition)
+            else:
+                _log.log(
+                    logging.ERROR if r.blocking else logging.WARNING,
+                    "[guards] condition=%s %s: %s",
+                    r.condition,
+                    "FAILED (blocking)" if r.blocking else "FAILED (warn)",
+                    r.message,
+                )
+        # fail-closed：仅 blocking 的失败中止执行（warn 级不阻断）
+        if report.blocking_failed:
             return False
         return True
 

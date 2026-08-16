@@ -26,14 +26,15 @@
       "comment": "缓冲区半径（米）"
     }
   ],
+  "guards_on_fail": "error",
   "guards": [
-    {"condition": "crs_projected"},
-    {"condition": "source_is_vector"},
-    {"condition": "source_is_point", "params": {"geometry_type": 0}},
-    {"condition": "boundary_is_polygon", "params": {"geometry_type": 2}},
-    {"condition": "boundary_fc_limit", "params": {"max": 10000}},
-    {"condition": "shapely_available"},
-    {"condition": "crs_match", "params": {"auto_reproject": true}}
+    {"condition": "crs_projected", "on_fail": "error"},
+    {"condition": "source_is_vector", "on_fail": "error"},
+    {"condition": "source_is_point", "params": {"geometry_type": 0}, "on_fail": "error"},
+    {"condition": "boundary_is_polygon", "params": {"geometry_type": 2}, "on_fail": "error"},
+    {"condition": "boundary_fc_limit", "params": {"max": 10000}, "on_fail": "warn"},
+    {"condition": "shapely_available", "on_fail": "error"},
+    {"condition": "crs_match", "params": {"auto_reproject": true}, "on_fail": "error"}
   ],
   "steps": [
     {
