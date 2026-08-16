@@ -1,0 +1,130 @@
+# P2/P3 路线图任务书 v1 — 执行端确定性外壳 + 多任务工作区
+
+> 作者：Solo（架构决策） | 日期：2026-08-16 | 状态：已批准立项，按切片下发
+> 本文是 P2/P3 的唯一权威范围文档。每个切片从本文拆出独立任务（solo.txt + APPROVED），
+> 一次一片，验收不过不进入下一片。
+
+## 1. 目标
+
+把 QGIS-Agent 从「5 条链真材实料、但哑巴/无档案/无后悔药的原型机」，
+升级为「会说话、有档案、能切换、能回滚」的防灾 GIS 分析工作台。
+
+- 不做：多 agent 扇出、LLM 动态规划、通用助手能力（8-14 战略红线）
+- 只做：确定性工程外壳（抄 DSH/Claude Code/Temporal/n8n/QGIS Processing/MCP
+  的共识原语，每条挑最轻形态，零新依赖）
+
+## 2. 代码现状盘点（2026-08-16 Solo 亲核）
+
+已有地基（REFACTOR 1-4 遗产），P2 大部分是「接通已有零件」而非新建：
+
+| 能力 | 现状 | 位置 |
+|---|---|---|
+| Pre 守卫框架 + 真实修复 | ✅ 已投产（crs_match auto_reproject 会真实重投影并写回） | `src/core/guards.py`（GuardRegistry/GuardChecker） |
+| 每引擎输出校验 | ✅ 已有 validate 表达式 + 求值器（fc/area/coverage_rate…） | `pipeline_executor.py:96-120, 553-556` |
+| 错误通道 | ✅ StepResult.error 全链路传递，错误信息具体 | `pipeline_executor.py` |
+| 结果契约 | ✅ UNIFIED_RESULT schema（layers/files/messages/stats，messages 三级） | `src/core/result_contract.py` |
+| 跨线程执行 | ✅ QThread worker + progress/finished/error/fix_needed + 延迟注册图层 | `sandbox_worker.py` / `offline_workflows.py` |
+| fallback 链 | ✅ 引擎链逐个尝试，validate 失败降级下一引擎 | `pipeline_executor.py:_execute_step_with_fallback` |
+| 输出持久化雏形 | ✅ 已有模块 | `src/core/output_persistence.py` / `project_manager.py` |
+
+真实缺口只有四条，都不是新机制：
+
+1. **无终态语义**：StepResult 有 error 无 status；fallback 机械成功但图层为空时仍记「成功」
+   （6-23 人口覆盖率「4/4 成功但图层空」就是此缺口）
+2. **声带没接到 UI**：降级历史/fallback last_error 未灌入 messages[] 喂给用户
+3. **澄清通道不存在**：图层角色识别是 6-19 遗留项；fix_needed 是给 LLM 自修用的，不是问用户
+4. **参数校验碎片化**：字段存在性检查散在各引擎手写（如 pipeline_executor.py:1088），无 params schema 门
+
+## 3. 切片路线（每片独立可交付、可验收）
+
+### P2-1 状态机（地基，必做）
+- 内容：StepResult 增加 `status: ok | degraded | failed`；链级裁决规则
+  （末步 error → failed；fallback 降级完成但结构校验不过 → degraded；其余 ok）
+- 规模：小（dataclass + 裁决函数 + 单测）
+- 风险：无。**一切的地基，P3 的 run 日志消费它**
+- 验收：57 既有用例全绿 + 新增 status 单测；demo 重跑 4 条链 status 正确
+
+### P2-2 出口体检（结构校验，必做）
+- 内容：5 条模板逐 step 补 validate 声明；新增「结果为空 = degraded」链级规则
+- 规模：中（清单式工作）
+- 红线（宪法级）：**结构校验与业务校验分离**——validator 只查
+  fc>0、字段存在、CRS 一致、几何有效；**禁止**把业务值当失败
+  （0% 覆盖率合法、盲区分析「全覆盖 → 空图层」是正确结果）
+- 验收：构造 3 个故意损坏的输入（空图层/错字段/CRS 不一致），全部报 degraded/failed 而非静默
+
+### P2-3 声带（报错链 + UI 显示，必做）
+- 内容：fallback last_error + 降级历史灌入 result_contract messages[]；
+  UI 结果显示区按 level 展示（error 红 / warning 黄 / info 灰）
+- 规模：中（UI 接线）
+- 验收：人为触发一次失败，用户在界面上看到「哪一步、为什么、建议」
+
+### P2-4 澄清（运行前澄清，可选，排最后）
+- 内容：仅做**运行前**澄清——图层角色歧义（多候选）时，**代码**生成问题 +
+  候选按钮，用户点选；LLM 不参与提问（4b 识别率 56%，让它提问 = 灾难）
+- 明确不做：运行中途暂停询问（跨线程握手复杂度高，MVP 砍掉）
+- 规模：中-大（唯一需要新机制的切片）
+- 风险：高。若做不成，不影响主线（P2-1~3 已完成时产品已「会说话」）
+
+### P2-5 在线红利（structured output，可选）
+- 内容：在线模式云模型启用 JSON schema 强制输出，在线 nojson 归零
+- 规模：小；依赖在线 API 是否支持 json mode，调研后定
+- 验收：在线 4 条 demo 指令 nojson=0
+
+### P3-1 工作区 manifest（必做）
+- 内容：工作区 = 目录 + workspace.json（name/country/layers/notes）；
+  manifest 读写模块；4 个新 action（workspace_new/save/open/list）
+- 规模：小（复用 output_persistence/project_manager 雏形）
+- 验收：新建→存→列→开，图层精确恢复
+
+### P3-2 run 日志 + 回滚（必做）
+- 内容：每次运行落一条 run 记录（模板+参数+status+结果摘要+产物路径，消费 P2-1 状态机）；
+  回滚 = workspace_open(workspace, run_id) 确定性重放
+- 规模：中
+- 红线：manifest 记录源文件 hash；源数据变更时明示「结果可能不同」，
+  **不承诺**「永远一致」；不做全量数据快照（数据会变且需重放时才上 git-LFS 式快照，远期）
+- 验收：跑一次 → 改画布 → open(run_id) 精确恢复原结果
+
+### P3-3 切换 + 队列 + 资源预检（必做）
+- 内容：前台自由切换（步骤边界挂起：完成当前步→持久化检查点→卸载），
+  后台串行队列（引擎层串行消化，绕开 QGIS 单例线程地雷），
+  入队前资源预检（内存+显存双预算，粗上限估算；不足 → 声带告知）
+- 明确不做：真并行双链（单链秒级收益≈0；QGIS 单例一撞就崩；多进程内存翻倍）
+  ——远期触发条件：出现分钟级大任务再评估
+- 规模：中；挂起≠冻结：Shapely 算到一半冻不住，只承诺步骤边界检查点
+- 验收：A 任务跑到中途切 B 任务再切回 A，状态与结果不丢
+
+## 4. 依赖顺序
+
+```
+P2-1 状态机 ──► P2-2 出口体检 ──► P2-3 声带 ──► (P2-4 澄清, 可选) ──► P2-5 在线红利(可选)
+                                                    │
+P3-1 manifest ──► P3-2 run 日志+回滚（消费 P2-1）──► P3-3 切换+队列
+```
+
+- P3-1 可与 P2 并行设计（manifest schema = StepResult 落盘格式），但实现排在 P2-1 之后
+- P2-4 排最后：前四片做完产品已「会说话」，澄清失败不影响主线
+
+## 5. 风险红线（防天马行空）
+
+1. **范围爆炸** → 每片 = 一个 solo.txt 任务 + APPROVED + 独立验收；一次一片
+2. **校验器狼来了** → 结构/业务校验分离是宪法级红线（见 P2-2）
+3. **澄清靠 LLM** → 问题只能由代码生成，用户点按钮，LLM 零参与
+4. **挂起承诺过满** → 只承诺步骤边界检查点 + 重放，不承诺随时冻结
+5. **测试债** → 每片都动 pipeline_executor/StepResult；**动手前先修宪**：
+   宪法第十条（显式状态 + 出口体检），57 个既有用例全程绿
+6. **重放承诺过满** → 源文件 hash + 变更明示，不隐式保证
+7. **零新依赖** → 全部原语实现在自有 PipelineExecutor/模板引擎里；
+   qgis-portable 是瘦过身的，不能再胖回去
+
+## 6. 时间估计（按项目历史节奏：REFACTOR 1-4 十四天）
+
+- 保守 3-4 周（8 片，每片含独立 QA），乐观 2 周
+- 每片都有可演示产物，不存在「憋大招」
+
+## 7. 与战略咬合
+
+- 8-14「一套引擎 + 数据适配 + 参数配置按国家切换」：工作区 manifest 携带
+  country 字段，切换工作区 = 切换国别配置（数据适配层的天然载体）
+- 面试价值：一个工作区目录 = 完整可复现案例包（数据+运行历史+结果），
+  拷走双击即复现
+- 确定性重放 = 机器可审计的大事记，这正是通用大模型 agent 做不到的差异化
