@@ -199,7 +199,7 @@ Solo 评估：
 - 对 prompt 的约束：few-shot 随模型版本化；核心靠壳兜底，不过度依赖对某模型弱点的特化
 - 换脑门槛（产品级，非"高一点就换"）：新模型须同时满足 ① 识别率提升 ≥ 明显阈值（约 +5 个百分点，超出误差带）② 三语子集均不退步 ③ 4-bit 后显存 ≤5GB 且留足 context/KV 余量 ④ 速度无明显回退。四项全过才换，否则维持现役（4b）。
 - 模型家族事实（2026-03）：Qwen3.5 小模型四款为 0.8B/1.7B/4B/9B，**无 7B**；Qwen 系内 4b 的下一档是 9b，已因显存（6.6GB>空闲5.5GB）与实测（旧prompt 36% 不稳）双重否决，故 Qwen 系内升级路径在 4b 后中断，候选只能跨家族（GLM/Gemma/Hunyuan 等）测评。
-- 候选池查证（2026-08，Solo 亲核 ollama 实测数据，已纠两次错）：① GLM-4.5-Air=106B 稀疏 MoE，服务器级，毙；② **Gemma 4 无 4B 档**——ollama 实测 gemma4:e4b=8.0B（Q4 9.6GB、context 131072），超 8GB 卡空闲 5.5GB，塞不下；gemma4:4b 不存在；仅 e2b(2B) 更小非对手。故 Gemma 4 对 qwen3.5-4b 无威胁；③ Hunyuan-7B JSON/生态弱；④ DeepSeek 推理型、Llama 英文系不适配；⑤ GLM 开源稠密端侧仅 9B（超线）；⑥ Qwen3.6 无 4B 稠密。结论：**8GB 约束下 qwen3.5-4b 当前无对手，换脑测评闭环，维持现役**。教训：模型标签名≠参数量（e4b 是 8B 不是 4B），须 ollama show 核实参数量再放行，禁止凭标签名猜参数。
+- 候选池查证（2026-08，Solo 多轮核实，最终定论）：**Gemma-4-E4B-it = 8B 稠密**（vllm 官方 recipe 确认，非 4B）；ollama 官方最小 Q4=9.6GB 超 8GB 卡，但 **Q3 量化约 3.7GB 可进 8GB**（CEO 手机 Edge Gallery 实测部署为证）。故 E4B-it 仍是活候选，P1.7 重开为「8B@Q3（llama.cpp+社区 GGUF）vs 4B@Q4（ollama）」头对头，按换脑门槛四项裁定。其余候选：GLM Air=106B MoE / GLM 稠密 9B 超线；Qwen3.6 无 4B 稠密；Hunyuan/DeepSeek/Llama 不适配。教训：① 标签名≠参数量（e4b=8B）；② 显存上限≠模型能否部署（量化档位可变，Q4 超线不等于 Q3 也超）。
 - 可选廉价准备：蒸馏数据生成两条路——① 试点（几百条）：Marvis 在 Trae 应用内用免费额度
   生成（合法用法；禁止抠内部 API key 写脚本，违反 ToS 有封号风险）；② 规模化（2-5k 条）：
   Marvis 写生成脚本 + 自有 DashScope API 批量跑（约 ¥7）。数据可复用为 P2-8 基准扩充与
