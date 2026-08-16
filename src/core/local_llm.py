@@ -46,6 +46,8 @@ class LocalLLMClient:
         max_tokens: int = 4096,
         expect_json: bool = False,
         max_retries: int = 2,
+        num_ctx: int = 4096,
+        use_native_chat: bool = True,
     ) -> str:
         """发送对话请求到本地大模型。
 
@@ -61,6 +63,11 @@ class LocalLLMClient:
             期望返回 JSON 时置 True；无效响应（空内容或 JSON 解析失败）会触发重发。
         max_retries : int
             无效响应时的最大重发次数（每次间隔 0.3s）。
+        num_ctx : int
+            Ollama 原生 /api/chat 端点的上下文窗口大小（use_native_chat=True 时生效）。
+        use_native_chat : bool
+            True 时走 Ollama 原生 /api/chat 端点（可精确控制 options.num_ctx）；
+            False 时保持 OpenAI 兼容 /v1/chat/completions 路径（对照与兼容用）。
 
         Returns
         -------
@@ -74,14 +81,9 @@ class LocalLLMClient:
         RuntimeError
             模型返回错误。
         """
-        url = f"{self.base_url.rstrip('/')}/chat/completions"
-        payload = {
-            "model": self.model,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            "stream": False,
-        }
+        url, payload = self._build_request(
+            messages, temperature, max_tokens, num_ctx, use_native_chat,
+        )
 
         last_content = ""
         for attempt in range(max_retries + 1):
@@ -102,8 +104,48 @@ class LocalLLMClient:
         )
         return last_content
 
+    def _build_request(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: float,
+        max_tokens: int,
+        num_ctx: int,
+        use_native_chat: bool,
+    ) -> tuple:
+        """构造请求 URL 与 payload。
+
+        - use_native_chat=True：Ollama 原生 /api/chat，base_url 去掉 /v1 后缀再拼 /api/chat，
+          options.num_ctx 精确生效；仅保证 Ollama 后端，LM Studio 等非 Ollama 后端不保证。
+        - use_native_chat=False：OpenAI 兼容 /v1/chat/completions，options.num_ctx 不生效。
+        """
+        if use_native_chat:
+            base = self.base_url.rstrip("/")
+            if base.endswith("/v1"):
+                base = base[: -len("/v1")]
+            url = f"{base}/api/chat"
+            payload = {
+                "model": self.model,
+                "messages": messages,
+                "temperature": temperature,
+                "stream": False,
+                "options": {"num_ctx": num_ctx, "num_predict": max_tokens},
+            }
+            return url, payload
+        url = f"{self.base_url.rstrip('/')}/chat/completions"
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": False,
+        }
+        return url, payload
+
     def _post_once(self, url: str, payload: Dict[str, Any]) -> str:
-        """发送单次请求并返回 content；网络/HTTP 异常语义保持现状。"""
+        """发送单次请求并返回 content；网络/HTTP 异常语义保持现状。
+
+        /api/chat 取 data["message"]["content"]；/v1 取 data["choices"][0]["message"]["content"]。
+        """
         try:
             resp = requests.post(
                 url,
@@ -114,6 +156,8 @@ class LocalLLMClient:
             )
             resp.raise_for_status()
             data = resp.json()
+            if url.rstrip("/").endswith("/api/chat"):
+                return data["message"]["content"]
             return data["choices"][0]["message"]["content"]
         except requests.exceptions.ConnectionError:
             raise ConnectionError(
