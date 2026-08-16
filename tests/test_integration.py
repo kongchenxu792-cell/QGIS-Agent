@@ -248,6 +248,97 @@ class TestIntegration(unittest.TestCase):
         self.assertEqual(len(template.steps), 8)
         self.assertEqual(template.template_id, "coverage_analysis")
 
+    # ── P2-1：fail-fast 中止 ────────────────────────────────
+
+    @patch.object(PipelineExecutor, '_execute_step')
+    def test_fail_fast_aborts_subsequent_steps(self, mock_execute_step):
+        """第 3 步失败 → 立即中止，后续步骤不执行，返回失败终态。"""
+        dummy_results = self._make_dummy_step_results()
+        called_steps = []
+
+        def side_effect(step, input_data, boundary_data):
+            called_steps.append(step.id)
+            if step.id == "spatial_filter":
+                return StepResult(step_id=step.id, error="mock failure", status="failed")
+            return dummy_results.get(step.id, StepResult(step_id=step.id, error="unknown"))
+
+        mock_execute_step.side_effect = side_effect
+
+        result = self.executor.execute(
+            template_path=TEMPLATE_PATH,
+            source_layer_name="shelters",
+            boundary_layer_name="admin_boundary",
+            radius_m=500.0,
+            project=self.project,
+            canvas=self.canvas,
+            _find_layer_fn=self.find_layer_fn,
+        )
+
+        self.assertFalse(result["success"])
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("第 3 步 'spatial_filter' 失败", result["message"])
+        # fail-fast：只执行了前 3 步（第 3 步失败后立即返回，后续 buffer/dissolve/clip/stats/output_layer 不再执行）
+        self.assertEqual(called_steps, ["boundary_dissolve", "boundary_buffer", "spatial_filter"])
+        self.assertIn("step_results", result)
+
+    # ── P2-1：终态诚实化 ────────────────────────────────────
+
+    @patch.object(PipelineExecutor, '_execute_step')
+    def test_honest_terminal_no_output_layer(self, mock_execute_step):
+        """输出步成功但未产出有效图层（qgis_layer=None）→ 终态 failed，不再无条件 success:True。"""
+        dummy_results = self._make_dummy_step_results()
+
+        def side_effect(step, input_data, boundary_data):
+            if step.id == "output_layer":
+                # 模拟"成功但无有效图层"（fail-fast 不会拦截，终态诚实化必须兜住）
+                return StepResult(step_id=step.id, output_type="layer", engine_used="qgis_memory_layer")
+            return dummy_results.get(step.id, StepResult(step_id=step.id, error="unknown"))
+
+        mock_execute_step.side_effect = side_effect
+
+        result = self.executor.execute(
+            template_path=TEMPLATE_PATH,
+            source_layer_name="shelters",
+            boundary_layer_name="admin_boundary",
+            radius_m=500.0,
+            project=self.project,
+            canvas=self.canvas,
+            _find_layer_fn=self.find_layer_fn,
+        )
+
+        self.assertFalse(result["success"])
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("output_layer", result["message"])
+        self.assertIn("未产生有效图层", result["message"])
+
+    @patch.object(PipelineExecutor, '_execute_step')
+    def test_honest_terminal_success_status_ok(self, mock_execute_step):
+        """健康链 → success:True + status:ok，且保留现有返回字段向后兼容。"""
+        dummy_results = self._make_dummy_step_results()
+
+        def side_effect(step, input_data, boundary_data):
+            return dummy_results.get(step.id, StepResult(step_id=step.id, error="unknown"))
+
+        mock_execute_step.side_effect = side_effect
+
+        result = self.executor.execute(
+            template_path=TEMPLATE_PATH,
+            source_layer_name="shelters",
+            boundary_layer_name="admin_boundary",
+            radius_m=500.0,
+            project=self.project,
+            canvas=self.canvas,
+            _find_layer_fn=self.find_layer_fn,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["status"], "ok")
+        # 向后兼容字段
+        self.assertEqual(result["step_count"], 8)
+        self.assertIsNotNone(result["output_layer"])
+        self.assertIn("coverage_rate", result["stats"])
+        self.assertIn("elapsed", result)
+
 
 if __name__ == "__main__":
     unittest.main()

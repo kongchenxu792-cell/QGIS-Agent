@@ -89,6 +89,7 @@ class StepResult:
     stats: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
     engine_used: str = ""
+    status: str = "ok"  # P2-1 显式状态机: ok|degraded|failed（degraded 留给 P2-2 出口体检）
 
 
 # ─── 变量映射表 ─────────────────────────────────────────────────
@@ -206,11 +207,11 @@ class PipelineExecutor:
         boundary_layer = self._find_layer(boundary_layer_name) if boundary_layer_name else None
 
         if intensity_layer_name and source_layer is None:
-            return {"success": False, "message": f"图层 '{intensity_layer_name}' 未找到"}
+            return {"success": False, "status": "failed", "message": f"图层 '{intensity_layer_name}' 未找到"}
         if source_layer_name and not intensity_layer_name and source_layer is None:
-            return {"success": False, "message": f"图层 '{source_layer_name}' 未找到"}
+            return {"success": False, "status": "failed", "message": f"图层 '{source_layer_name}' 未找到"}
         if boundary_layer_name and boundary_layer is None:
-            return {"success": False, "message": f"图层 '{boundary_layer_name}' 未找到"}
+            return {"success": False, "status": "failed", "message": f"图层 '{boundary_layer_name}' 未找到"}
 
         self.project = project
         self.canvas = canvas
@@ -263,7 +264,7 @@ class PipelineExecutor:
                     f"{r.condition}: {r.message}" for r in report.blocking_failed
                 )
             message = f"Guard check failed: {detail}" if detail else "Guard check failed"
-            return {"success": False, "message": message}
+            return {"success": False, "status": "failed", "message": message}
 
         # step_outputs: {step_id → resolved output, "$source_layer" → layer, ...}
         step_outputs: Dict[str, Any] = {
@@ -286,7 +287,7 @@ class PipelineExecutor:
         current_boundary = boundary_layer  # 跟踪当前边界
 
         try:
-            for step in self.template.steps:
+            for step_idx, step in enumerate(self.template.steps, start=1):
                 t_step = time.time()
 
                 # 解析 input_source
@@ -311,6 +312,17 @@ class PipelineExecutor:
                 step_outputs[step.id] = result
                 step_outputs[step.id + ".output"] = self._extract_output_value(result)
 
+                # P2-1 fail-fast：步骤失败立即中止后续步骤，不再照跑
+                if result.error is not None or result.status == "failed":
+                    _log.error("[execute] 第 %d 步 '%s' 失败，中止后续步骤: %s",
+                               step_idx, step.id, result.error or "status=failed")
+                    return {
+                        "success": False,
+                        "status": "failed",
+                        "message": f"第 {step_idx} 步 '{step.id}' 失败: {result.error or 'unknown error'}",
+                        "step_results": self.step_results,
+                    }
+
                 # 声明式边界传播
                 if hasattr(step, 'propagate_boundary') and step.propagate_boundary:
                     if result.qgis_layer is not None:
@@ -321,7 +333,8 @@ class PipelineExecutor:
 
         except Exception as e:
             traceback.print_exc()
-            return {"success": False, "message": str(e), "step_results": self.step_results}
+            _log.error("[execute] 执行异常中止: %s", e)
+            return {"success": False, "status": "failed", "message": str(e), "step_results": self.step_results}
 
         output_result = self.step_results.get("output_layer", self.step_results.get("output"))
         stats_result = self.step_results.get("stats")
@@ -330,6 +343,50 @@ class PipelineExecutor:
                   output_result is not None,
                   output_result.error if output_result else "N/A",
                   output_result.qgis_layer is not None if output_result else "N/A")
+
+        # ── P2-1 终态诚实化：输出步缺失/error/无有效图层 → 真失败（不再无条件 success:True）──
+        stats_snapshot = stats_result.stats if stats_result else {}
+        if output_result is None:
+            _log.error("[execute] 终态失败：未找到输出步骤结果（output_layer/output）")
+            return {
+                "success": False,
+                "status": "failed",
+                "message": "输出步骤缺失：未找到 output_layer/output 步骤结果",
+                "elapsed": time.time() - t0,
+                "step_count": len(self.step_results),
+                "step_results": self.step_results,
+                "output_layer": None,
+                "feature_count": 0,
+                "stats": stats_snapshot,
+            }
+        if output_result.error is not None:
+            _log.error("[execute] 终态失败：输出步骤 '%s' error=%s",
+                       output_result.step_id, output_result.error)
+            return {
+                "success": False,
+                "status": "failed",
+                "message": f"输出步骤 '{output_result.step_id}' 失败: {output_result.error}",
+                "elapsed": time.time() - t0,
+                "step_count": len(self.step_results),
+                "step_results": self.step_results,
+                "output_layer": None,
+                "feature_count": 0,
+                "stats": stats_snapshot,
+            }
+        if output_result.qgis_layer is None:
+            _log.error("[execute] 终态失败：输出步骤 '%s' 未产生有效图层",
+                       output_result.step_id)
+            return {
+                "success": False,
+                "status": "failed",
+                "message": f"输出步骤 '{output_result.step_id}' 未产生有效图层",
+                "elapsed": time.time() - t0,
+                "step_count": len(self.step_results),
+                "step_results": self.step_results,
+                "output_layer": None,
+                "feature_count": 0,
+                "stats": stats_snapshot,
+            }
 
         # 构建详细输出信息
         output_name = ""
@@ -401,6 +458,7 @@ class PipelineExecutor:
 
         return {
             "success": True,
+            "status": "ok",  # P2-1 显式终态状态机
             "message": "".join(message_parts),
             "elapsed": time.time() - t0,
             "step_count": len(self.step_results),
@@ -591,6 +649,7 @@ class PipelineExecutor:
                     continue
 
                 _log.info("[step %s] engine=%s OK", step.id, eng.name)
+                result.status = "ok"  # P2-1 显式成功态
                 return result
 
             except Exception as e:
@@ -599,7 +658,9 @@ class PipelineExecutor:
                 last_error = f"{eng.name} crashed: {e}"
                 continue
 
-        return StepResult(step_id=step.id, error=last_error)
+        # P2-1：全部引擎耗尽 → failed（显式状态 + 错误日志）
+        _log.error("[step %s] FAILED (all engines exhausted): %s", step.id, last_error)
+        return StepResult(step_id=step.id, error=last_error, status="failed")
 
     # ── 引擎调度 ─────────────────────────────────────────────────
 
