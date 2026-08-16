@@ -617,7 +617,7 @@ class AIProcessingWorker(QThread):
 
         client = LocalLLMClient()
         try:
-            response_text = client.chat(messages)
+            response_text = client.chat(messages, expect_json=True)
         except ConnectionError as e:
             raise RuntimeError(str(e))
         except TimeoutError as e:
