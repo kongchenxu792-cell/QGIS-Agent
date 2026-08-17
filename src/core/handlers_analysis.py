@@ -250,12 +250,20 @@ class HandlersAnalysisMixin:
 
         路由到 PipelineExecutor，由 population_coverage.json 模板驱动 9 步全链路。
         """
+        auto_name = ""
         if not source_layer or not boundary_layer:
             return {"success": False,
                     "message": "population_coverage 需要 source_layer 和 boundary_layer 两个参数"}
         if not population_layer:
-            return {"success": False,
-                    "message": "population_coverage 需要 population_layer 参数"}
+            # 杂项修复①：人口图层兜底——LLM 未提供或匹配失败时，若当前项目只有一个矢量面图层候选，
+            # 自动使用该图层并走声带 info 消息记录；多候选歧义时维持现状（报缺参数，不擅自选）。
+            auto_name = self._auto_select_polygon_layer(project)
+            if auto_name:
+                population_layer = auto_name
+                _log.info("人口图层兜底：已自动选择人口图层：%s", auto_name)
+            else:
+                return {"success": False,
+                        "message": "population_coverage 需要 population_layer 参数"}
         if not population_field:
             return {"success": False,
                     "message": "population_coverage 需要 population_field 参数"}
@@ -265,7 +273,7 @@ class HandlersAnalysisMixin:
         from core.pipeline_executor import PipelineExecutor
 
         executor = PipelineExecutor()
-        return executor.execute(
+        result = executor.execute(
             template_path=template_path,
             source_layer_name=source_layer,
             boundary_layer_name=boundary_layer,
@@ -276,6 +284,38 @@ class HandlersAnalysisMixin:
             canvas=canvas,
             _find_layer_fn=lambda name: self._find_layer(project, name),
         )
+        if auto_name and isinstance(result, dict):
+            # 走声带 info 消息：记录自动选择说明（并入 message 展示 + info 字段供 UI 消费）
+            result = dict(result)
+            note = f"已自动选择人口图层：{auto_name}"
+            result["info"] = note
+            if result.get("message"):
+                result["message"] = f"{note}；{result['message']}"
+        return result
+
+    def _auto_select_polygon_layer(self, project) -> str:
+        """杂项修复①：查找当前项目中唯一的矢量面图层候选。
+
+        仅当候选矢量面图层恰好为 1 个时返回其名称；0 个或多个（歧义）返回空串，
+        由调用方维持现状（报缺参数/走澄清），不擅自选择。
+        """
+        if project is None:
+            return ""
+        try:
+            from qgis.core import QgsMapLayer, QgsWkbTypes
+        except ImportError:
+            return ""
+        polygon_layers = []
+        for layer in project.mapLayers().values():
+            try:
+                if layer.type() == QgsMapLayer.VectorLayer and \
+                        layer.geometryType() == QgsWkbTypes.PolygonGeometry:
+                    polygon_layers.append(layer)
+            except Exception:
+                continue
+        if len(polygon_layers) == 1:
+            return polygon_layers[0].name()
+        return ""
 
     def _handle_building_risk_analysis(self, canvas=None, project=None,
                                         intensity_layer: str = "",

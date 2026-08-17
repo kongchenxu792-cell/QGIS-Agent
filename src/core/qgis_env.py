@@ -312,11 +312,15 @@ def bootstrap_qgis(custom_prefix_path: Optional[str] = None) -> QgisBootstrapRes
 
     attempted_paths: List[str] = []
     last_error: Optional[str] = None
+    portable_failure: Optional[str] = None  # 杂项修复②：便携引擎加载失败原因
 
     for candidate in candidates:
         attempted_paths.append(candidate)
+        is_portable = "qgis-portable" in str(candidate).lower()
         python_path = Path(candidate) / "python"
         if not python_path.exists():
+            if is_portable and portable_failure is None:
+                portable_failure = "python 目录不存在"
             continue
 
         try:
@@ -325,13 +329,19 @@ def bootstrap_qgis(custom_prefix_path: Optional[str] = None) -> QgisBootstrapRes
             from qgis.core import QgsApplication  # type: ignore  # noqa: F401
             from qgis.gui import QgsMapCanvas  # type: ignore  # noqa: F401
 
+            message = f"已成功加载 PyQGIS 环境：{configured_prefix}"
+            if portable_failure is not None and not is_portable:
+                # 杂项修复②：便携引擎验证失败回退系统 QGIS 时，显式标注警告（不改变回退行为）
+                message = f"便携引擎加载失败，已回退系统 QGIS：{portable_failure}。{message}"
             return QgisBootstrapResult(
                 available=True,
-                message=f"已成功加载 PyQGIS 环境：{configured_prefix}",
+                message=message,
                 prefix_path=configured_prefix,
                 candidate_paths=attempted_paths,
             )
         except Exception as exc:  # pragma: no cover - 依赖运行环境
+            if is_portable and portable_failure is None:
+                portable_failure = str(exc)
             last_error = str(exc)
 
     message = (
