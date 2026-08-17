@@ -112,8 +112,6 @@ class MultimodalPromptBuilder:
             "  示例: {{\"input_layer\": \"parcels\", \"field\": \"district\"}}\n"
             "- intersect:    {{\"input_layer\": \"图层名\", \"overlay_layer\": \"叠加图层名\"}}\n"
             "  示例: {{\"input_layer\": \"roads\", \"overlay_layer\": \"admin_boundary\"}}\n"
-            "- spatial_analysis: {{\"query\": \"分析描述\"}}\n"
-            "  示例: {{\"query\": \"计算每个行政区的面积\"}}\n"
             "- navigation:   {{\"action\": \"zoom_layer\"|\"zoom_extent\"|\"center\"|\"scale\"|\"refresh\""
             "|\"zoom_in\"|\"zoom_out\", ...}}\n"
             "  示例: {{\"action\": \"zoom_layer\", \"layer_name\": \"成都市_市\"}}\n"
