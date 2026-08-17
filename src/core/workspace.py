@@ -255,6 +255,181 @@ class WorkspaceManager:
         shutil.rmtree(ws_dir)
         return {"success": True, "message": f"工作区已删除：{workspace_id}"}
 
+    # ── runs 能力（P3-2：运行日志 + 回滚）────────────────────
+
+    _RECENT_DIR = "_recent"
+
+    def _runs_dir(self, workspace_id: Optional[str] = None) -> str:
+        """runs 目录：有工作区 → <root>/<id>/runs/；无工作区 → <root>/_recent/（自动建）。"""
+        if workspace_id:
+            return os.path.join(self._ws_dir(workspace_id), "runs")
+        return os.path.join(self.root_dir, self._RECENT_DIR)
+
+    @staticmethod
+    def _new_run_id() -> str:
+        """生成 run_id：时间戳短码（秒级 + 2 位随机后缀防同秒冲突）。"""
+        import random
+        ts = datetime.now().strftime("%Y%m%d%H%M%S")
+        return f"{ts}{random.randint(10, 99)}"
+
+    @staticmethod
+    def _sha256_head(path: str) -> str:
+        """计算文件 sha256 前 16 位（流式读取，控制内存）。"""
+        import hashlib
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                h.update(chunk)
+        return h.hexdigest()[:16]
+
+    def _compute_source_hashes(self, workspace_id: Optional[str] = None,
+                               project: Any = None) -> Dict[str, str]:
+        """收集源文件 sha256 摘要：{源路径: 前 16 位}。
+
+        - 优先 manifest layers[].source（有工作区且 manifest 含图层时）
+        - 否则从 QgsProject 当前图层 source 收集（无工作区 / manifest 无图层时）
+        """
+        sources: List[str] = []
+        if workspace_id:
+            manifest = self._read_manifest(workspace_id)
+            if manifest:
+                sources = [e.get("source", "") for e in manifest.get("layers", [])
+                           if e.get("source")]
+        if not sources and project is not None:
+            sources = [layer.source() for layer in project.mapLayers().values()
+                       if layer.source()]
+        hashes: Dict[str, str] = {}
+        for src in sources:
+            if not src or not os.path.isfile(src):
+                continue
+            try:
+                hashes[src] = self._sha256_head(src)
+            except Exception:
+                continue
+        return hashes
+
+    def record_run(self, workspace_id: Optional[str], template_id: str,
+                   params: Dict[str, Any], result: Dict[str, Any],
+                   project: Any = None) -> Dict[str, Any]:
+        """记录一次分析链执行到 runs 目录（机器版大事记）。
+
+        - workspace_id 为空或 manifest 不存在 → 落 user_data/workspaces/_recent/（自动建）
+        - status 直接消费 result['status']（ok/degraded/failed，P2-1/P2-2 状态机）
+        - result 摘要：stats / feature_count / message 关键数字
+        - outputs：result['output_file'] 非空时收集
+        - source_hashes：基于 manifest layers[].source（或当前项目图层 source）
+        """
+        if workspace_id:
+            manifest = self._read_manifest(workspace_id)
+            if manifest is None:
+                workspace_id = None
+
+        run_id = self._new_run_id()
+        run_dir = self._runs_dir(workspace_id)
+        os.makedirs(run_dir, exist_ok=True)
+
+        status = str(result.get("status") or ("ok" if result.get("success") else "failed"))
+        if status not in ("ok", "degraded", "failed"):
+            status = "ok" if result.get("success") else "failed"
+
+        summary: Dict[str, Any] = {}
+        stats = result.get("stats")
+        if isinstance(stats, dict) and stats:
+            summary["stats"] = {k: v for k, v in stats.items()
+                                if isinstance(v, (int, float, str))}
+        fc = result.get("feature_count")
+        if fc is not None:
+            summary["feature_count"] = fc
+        msg = result.get("message", "")
+        if msg:
+            summary["message"] = str(msg)[:200]
+
+        outputs: List[str] = []
+        of = result.get("output_file")
+        if of:
+            outputs.append(str(of))
+
+        record: Dict[str, Any] = {
+            "run_id": run_id,
+            "template_id": template_id,
+            "params": dict(params or {}),
+            "status": status,
+            "result": summary,
+            "outputs": outputs,
+            "source_hashes": self._compute_source_hashes(workspace_id, project),
+            "created_at": self._now(),
+        }
+        path = os.path.join(run_dir, f"{run_id}.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(record, f, ensure_ascii=False, indent=2)
+        return {
+            "success": True,
+            "message": f"运行记录已保存：{template_id}（{status}）",
+            "run_id": run_id,
+            "record": record,
+            "stored_path": path,
+        }
+
+    def list_runs(self, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+        """列出运行记录 [{run_id, template_id, status, created_at, summary}]，按时间倒序。"""
+        run_dir = self._runs_dir(workspace_id)
+        if not os.path.isdir(run_dir):
+            return {"success": True, "message": "暂无运行记录", "runs": []}
+        runs: List[Dict[str, Any]] = []
+        for fn in sorted(os.listdir(run_dir)):
+            if not fn.endswith(".json"):
+                continue
+            try:
+                with open(os.path.join(run_dir, fn), "r", encoding="utf-8") as f:
+                    rec = json.load(f)
+                runs.append({
+                    "run_id": rec.get("run_id", fn[:-5]),
+                    "template_id": rec.get("template_id", ""),
+                    "status": rec.get("status", ""),
+                    "created_at": rec.get("created_at", ""),
+                    "summary": rec.get("result", {}),
+                })
+            except Exception:
+                continue
+        runs.sort(key=lambda r: r.get("created_at", ""), reverse=True)
+        return {"success": True, "message": f"共 {len(runs)} 条运行记录", "runs": runs}
+
+    def get_run(self, workspace_id: Optional[str], run_id: str) -> Dict[str, Any]:
+        """读取完整运行记录。"""
+        path = os.path.join(self._runs_dir(workspace_id), f"{run_id}.json")
+        if not os.path.isfile(path):
+            return {"success": False, "message": f"运行记录不存在：{run_id}"}
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                rec = json.load(f)
+        except Exception as exc:
+            return {"success": False, "message": f"运行记录损坏：{exc}"}
+        return {"success": True, "run_id": run_id, "record": rec}
+
+    def replay_run(self, workspace_id: Optional[str], run_id: str,
+                   project: Any = None) -> Dict[str, Any]:
+        """回滚 = 取回 template_id/params 供上层确定性重放。
+
+        - 校验 source_hashes：全部一致 → {ok, template_id, params}
+        - 任一 hash 变更 → 追加 warning「源数据已变更，重放结果可能不同」（不阻断）
+        """
+        got = self.get_run(workspace_id, run_id)
+        if not got["success"]:
+            return got
+        rec = got["record"]
+        out: Dict[str, Any] = {
+            "ok": True,
+            "template_id": rec.get("template_id", ""),
+            "params": rec.get("params", {}),
+        }
+        stored = rec.get("source_hashes") or {}
+        current = self._compute_source_hashes(workspace_id, project)
+        changed = [src for src, h in stored.items() if current.get(src) != h]
+        if changed:
+            out["warning"] = "源数据已变更，重放结果可能不同"
+            out["changed_sources"] = changed
+        return out
+
 
 def get_workspace_manager(root_dir: Optional[str] = None) -> WorkspaceManager:
     """获取 WorkspaceManager 实例（无状态，直接新建即可）。"""

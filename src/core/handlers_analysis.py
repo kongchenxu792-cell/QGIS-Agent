@@ -231,7 +231,7 @@ class HandlersAnalysisMixin:
         from core.pipeline_executor import PipelineExecutor
 
         executor = PipelineExecutor()
-        return executor.execute(
+        result = executor.execute(
             template_path=template_path,
             source_layer_name=source_layer,
             boundary_layer_name=boundary_layer,
@@ -240,6 +240,12 @@ class HandlersAnalysisMixin:
             canvas=canvas,
             _find_layer_fn=lambda name: self._find_layer(project, name),
         )
+        self._record_analysis_run(
+            "coverage_analysis", result, project=project,
+            source_layer=source_layer, boundary_layer=boundary_layer,
+            radius_m=radius_m, selected_only=selected_only,
+        )
+        return result
 
     def _handle_population_coverage(self, canvas=None, project=None,
                                      source_layer: str = "", boundary_layer: str = "",
@@ -283,6 +289,12 @@ class HandlersAnalysisMixin:
             project=project,
             canvas=canvas,
             _find_layer_fn=lambda name: self._find_layer(project, name),
+        )
+        self._record_analysis_run(
+            "population_coverage", result, project=project,
+            source_layer=source_layer, boundary_layer=boundary_layer,
+            population_layer=population_layer, population_field=population_field,
+            radius_m=radius_m, selected_only=selected_only,
         )
         if auto_name and isinstance(result, dict):
             # 走声带 info 消息：记录自动选择说明（并入 message 展示 + info 字段供 UI 消费）
@@ -372,7 +384,7 @@ class HandlersAnalysisMixin:
         from core.pipeline_executor import PipelineExecutor
 
         executor = PipelineExecutor()
-        return executor.execute(
+        result = executor.execute(
             template_path=template_path,
             intensity_layer_name=intensity_layer,
             population_layer_name=population_layer,
@@ -383,6 +395,13 @@ class HandlersAnalysisMixin:
             canvas=canvas,
             _find_layer_fn=lambda name: self._find_layer(project, name),
         )
+        self._record_analysis_run(
+            "building_risk_analysis", result, project=project,
+            intensity_layer=intensity_layer, population_layer=population_layer,
+            population_field=population_field, intensity_field=intensity_field,
+            boundary_layer=boundary_layer,
+        )
+        return result
 
     def _handle_gap_analysis(self, canvas=None, project=None,
                               source_layer: str = "", boundary_layer: str = "",
@@ -401,7 +420,7 @@ class HandlersAnalysisMixin:
         from core.pipeline_executor import PipelineExecutor
 
         executor = PipelineExecutor()
-        return executor.execute(
+        result = executor.execute(
             template_path=template_path,
             source_layer_name=source_layer,
             boundary_layer_name=boundary_layer,
@@ -410,3 +429,24 @@ class HandlersAnalysisMixin:
             canvas=canvas,
             _find_layer_fn=lambda name: self._find_layer(project, name),
         )
+        self._record_analysis_run(
+            "gap_analysis", result, project=project,
+            source_layer=source_layer, boundary_layer=boundary_layer,
+            radius_m=radius_m, selected_only=selected_only,
+        )
+        return result
+
+    def _record_analysis_run(self, template_id: str, result: Dict[str, Any],
+                             project: Any = None, **params) -> None:
+        """P3-2 分析链收口：统一记录一次引擎链执行（单点收口，最小侵入）。
+
+        - 成功 / degraded / failed 均记录（审计用）；参数校验类提前 return 不记录
+        - 无活动工作区 → 落 user_data/workspaces/_recent/
+        - 记录失败仅告警，绝不阻断主流程返回
+        """
+        try:
+            from core.workspace import WorkspaceManager
+            mgr = WorkspaceManager()
+            mgr.record_run(None, template_id, params, result, project=project)
+        except Exception as exc:  # noqa: BLE001 - 记录是旁路，不允许影响主流程
+            _log.warning("record_run 失败（已忽略，不影响分析结果）: %s", exc)
