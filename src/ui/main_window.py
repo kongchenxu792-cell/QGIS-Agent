@@ -94,6 +94,7 @@ from core.multimodal.canvas_capture import CanvasCapture
 from core.output_persistence import generate_output_path, generate_geojson_output_path
 from core.project_manager import ProjectManager
 from core.qgis_env import QgisBootstrapResult
+from core.run_queue import get_run_queue
 from skills.style_manager import style_manager
 from ui.api_config_dialog import ApiConfigDialog
 from ui.ai_code_preview import AiCodePreviewDialog
@@ -455,6 +456,13 @@ class MainWindow(QMainWindow):
         self._import_layer_action: QAction | None = None
 
         self.statusBar().showMessage(self._lm.tr("status_ready"), 5000)
+
+        # P3-3：运行队列状态最小显示（状态栏），切换入口复用 workspace_open/list action
+        get_run_queue().state_changed.connect(self._on_queue_state_changed)
+
+    def _on_queue_state_changed(self, message: str) -> None:
+        """P3-3：队列状态变化 → 状态栏最小显示（「队列：X 在跑 / Y 排队」）。"""
+        self.statusBar().showMessage(message, 3000)
 
     def _build_ui(self) -> None:
         """构建完整的窗口布局。"""
