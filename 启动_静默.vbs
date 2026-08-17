@@ -1,3 +1,3 @@
 Set WshShell = CreateObject("WScript.Shell")
-WshShell.CurrentDirectory = "D:\×ÀÃæ\QGIS-Agent"
-WshShell.Run "C:\WINDOWS\system32\cmd.exe /c ""D:\×ÀÃæ\QGIS-Agent\Æô¶¯.bat""", 0, False
+WshShell.CurrentDirectory = "D:\æ¡Œé¢\QGIS-Agent"
+WshShell.Run "C:\WINDOWS\system32\cmd.exe /c ""D:\æ¡Œé¢\QGIS-Agent\å¯åŠ¨.bat""", 0, False

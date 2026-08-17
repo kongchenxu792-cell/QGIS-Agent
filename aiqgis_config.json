@@ -8,5 +8,6 @@
   "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
   "model_name": "qwen-plus",
   "local_model_url": "http://127.0.0.1:11434/v1",
+  "local_model_name": "qwen3.5-4b:latest",
   "language": "zh"
 }
