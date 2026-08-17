@@ -268,9 +268,7 @@ def build_system_prompt(layer_metadata: Optional[List[Dict[str, Any]]] = None,
         f"{history_text}\n\n"
         "## 可用技能清单\n\n"
         f"{skills_section}\n"
-        "## PyQGIS Processing 算法速查（spatial_analysis 技能内部可用）\n\n"
-        "当用户请求的空间分析操作超出独立技能范围时，会自动路由到 spatial_analysis 技能，\n"
-        "由 AI 生成 PyQGIS 代码自由调用以下 QGIS 原生 Processing 算法。\n\n"
+        "## PyQGIS Processing 算法速查\n\n"
         "### 核心向量算子（native: 前缀）\n\n"
         "1. native:buffer\n"
         "   参数: INPUT(矢量图层), DISTANCE(浮点数,CRS单位), SEGMENTS(整数1-99,默认8),\n"
@@ -401,8 +399,6 @@ def build_system_prompt(layer_metadata: Optional[List[Dict[str, Any]]] = None,
         "- save_project: {{}}\n"
         "- open_table:   {{\"layer_name\": \"图层名\"}}\n"
         "  示例: {{\"layer_name\": \"[Buffer] roads\"}}\n"
-        "- spatial_analysis: {{\"query\": \"分析描述\"}}\n"
-        "  示例: {{\"query\": \"计算每个行政区的面积\"}}\n"
         "- navigation:   {{\"action\": \"zoom_layer\"|\"zoom_extent\"|\"center\"|\"scale\"|\"refresh\""
         "|\"zoom_in\"|\"zoom_out\", ...}}\n"
         "  示例: {{\"action\": \"zoom_layer\", \"layer_name\": \"成都市_市\"}}\n"
@@ -649,6 +645,7 @@ class AIProcessingWorker(QThread):
             "skill": "_offline_response",
             "arguments": json.dumps({
                 "success": result.get("success", False),
+                "status": result.get("status", "ok" if result.get("success", False) else "failed"),
                 "message": result.get("message", ""),
                 "action": result.get("action", ""),
             }),
@@ -748,6 +745,7 @@ class AIProcessingWorker(QThread):
             "skill": "_offline_response",
             "arguments": json.dumps({
                 "success": result.get("success", False),
+                "status": result.get("status", "ok" if result.get("success", False) else "failed"),
                 "message": result.get("message", ""),
                 "action": result.get("action", ""),
                 "output_file": result.get("output_file", ""),
@@ -854,7 +852,6 @@ _SKILL_PARAM_SCHEMA: Dict[str, tuple] = {
     "open_project":    (["file_path"], []),
     "save_project":    ([], []),
     "open_table":      (["layer_name"], []),
-    "spatial_analysis":(["query"], []),
     "navigation":      (["action"], ["layer_name", "west", "south", "east", "north", "lat", "lon", "scale", "crs"]),
     "inspect":         (["action"], ["layer_name", "expression"]),
     "raster_style":    (["layer_name"], ["palette", "min_value", "max_value"]),
@@ -988,10 +985,6 @@ def _normalize_arguments(skill: str, raw_arguments) -> str:
         name_match = _re.search(r"(?:图层|layer|打开)\s*[「「\s]*([^\s」」,，、]+)", s)
         if name_match:
             extracted["layer_name"] = name_match.group(1)
-
-    # --- 提取 query（spatial_analysis） ---
-    if "query" in required or "query" in optional:
-        extracted["query"] = s
 
     if not extracted:
         _log.warning("无法从自然语言中提取任何参数，保留原文")

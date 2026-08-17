@@ -247,6 +247,91 @@ def adapt_finished_result(
     }
 
 
+# ================================================================
+# P2-3: status 派生消息
+# ================================================================
+
+_DEFAULT_SUGGESTIONS = {
+    "degraded": "请检查输入数据/参数后重试，或确认该步骤输出为空是否符合预期",
+    "failed": "请检查上一步输入数据、参数与坐标系设置后重试",
+}
+
+
+def derive_status_message(
+    status: str,
+    step_index: int = 0,
+    step_id: str = "",
+    reason: str = "",
+    suggestion: str = "",
+) -> Dict[str, str]:
+    """
+    P2-3：由执行显式 status 派生面向用户的消息（哪一步、为什么、建议）。
+
+    - status == "degraded" → level="warning"，含原因与建议
+    - status == "failed"   → level="error"，格式: 第 N 步 '<id>' 失败: 原因
+    - 其他                 → level="info"，空内容（不产生消息）
+
+    Parameters
+    ----------
+    status : str
+        执行状态（ok / degraded / failed）。
+    step_index : int
+        步骤序号（从 1 开始，用于人类可读的"第 N 步"）。
+    step_id : str
+        步骤标识（skill 名称等）。
+    reason : str
+        具体原因（一般取自 result["message"] 或异常信息）。
+    suggestion : str
+        建议内容；缺省按 status 使用通用建议。
+
+    Returns
+    -------
+    dict
+        符合 MESSAGE_SCHEMA 的消息字典。
+    """
+    if status == "degraded":
+        why = reason.strip() if reason and reason.strip() else "输出结果为空或结构异常"
+        sugg = suggestion.strip() if suggestion and suggestion.strip() else _DEFAULT_SUGGESTIONS["degraded"]
+        return {
+            "level": "warning",
+            "content": f"第 {step_index} 步 '{step_id}' 结果存疑: {why}。建议: {sugg}",
+        }
+    if status == "failed":
+        why = reason.strip() if reason and reason.strip() else "未知原因"
+        sugg = suggestion.strip() if suggestion and suggestion.strip() else _DEFAULT_SUGGESTIONS["failed"]
+        return {
+            "level": "error",
+            "content": f"第 {step_index} 步 '{step_id}' 失败: {why}。建议: {sugg}",
+        }
+    return {"level": "info", "content": ""}
+
+
+def append_status_messages(
+    messages: List[Dict],
+    status: str,
+    step_index: int = 0,
+    step_id: str = "",
+    reason: str = "",
+    suggestion: str = "",
+) -> List[Dict]:
+    """
+    P2-3：将 status 派生消息追加到 messages 列表（就地修改并返回原列表）。
+
+    非 ok 状态（degraded/failed）才追加；ok 不产生额外消息。
+    返回同一列表，便于链式使用。
+    """
+    msg = derive_status_message(
+        status=status,
+        step_index=step_index,
+        step_id=step_id,
+        reason=reason,
+        suggestion=suggestion,
+    )
+    if msg.get("content"):
+        messages.append(msg)
+    return messages
+
+
 def validate_schema(data: Dict[str, Any]) -> List[str]:
     """校验统一结果是否合法。返回错误列表，空列表表示通过。"""
     errors = []

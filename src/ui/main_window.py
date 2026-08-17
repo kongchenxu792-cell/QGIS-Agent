@@ -94,7 +94,6 @@ from core.multimodal.canvas_capture import CanvasCapture
 from core.output_persistence import generate_output_path, generate_geojson_output_path
 from core.project_manager import ProjectManager
 from core.qgis_env import QgisBootstrapResult
-from core.sandbox_worker import SandboxExecutionWorker
 from skills.style_manager import style_manager
 from ui.api_config_dialog import ApiConfigDialog
 from ui.ai_code_preview import AiCodePreviewDialog
@@ -395,13 +394,6 @@ class MainWindow(QMainWindow):
         self.last_ai_code = ""
         self.skip_preview = False  # 是否跳过代码预览
 
-        # 沙箱 Worker 状态（Pain 2 自愈循环）
-        self._sandbox_worker: Optional[SandboxExecutionWorker] = None
-        self._sandbox_retry_count = 0
-        self._sandbox_original_code = ""
-        self._sandbox_user_text = ""
-        self._sandbox_force_numpy_gdal = False  # 追踪是否已强制降级到 numpy/gdal
-
         # 任务编排器状态（复合任务串行传送带）
         self._task_pipeline: List[dict] = []
         self._task_pipeline_index: int = 0
@@ -435,7 +427,6 @@ class MainWindow(QMainWindow):
         # 兼容布尔语义：offline 与 hybrid 均为「本地优先」
         self.offline_mode = self.current_mode in ("offline", "hybrid")
         self.offline_mode_label: Optional[QLabel] = None
-        self._offline_buttons: List[QPushButton] = []
 
         # i18n 语言管理器（必须在 UI 组件之前初始化）
         self._lm = lang_manager()
@@ -454,15 +445,6 @@ class MainWindow(QMainWindow):
         self.resize(1440, 900)
         self._build_ui()
         self._apply_styles()
-
-        # P2：进度条（离线流程时显示在状态栏）
-        self._offline_progress_bar = QProgressBar()
-        self._offline_progress_bar.setMaximumWidth(200)
-        self._offline_progress_bar.setMaximumHeight(16)
-        self._offline_progress_bar.setRange(0, 0)  # 不确定模式
-        self._offline_progress_bar.setVisible(False)
-        self._offline_progress_bar.setToolTip("离线快捷流程执行中...")
-        self.statusBar().addPermanentWidget(self._offline_progress_bar)
 
         # 文件菜单新增项引用（供 _refresh i18n 使用）
         self._file_menu: QMenu | None = None
@@ -865,45 +847,6 @@ class MainWindow(QMainWindow):
         self.ai_response_display.setPlaceholderText(lm.tr("ai_response_placeholder"))
         self.ai_response_display.setToolTip(lm.tr("ai_response_tooltip"))
 
-        # 快捷流程标签
-        if hasattr(self, '_offline_label'):
-            self._offline_label.setText(lm.tr("label_shortcuts"))
-
-        # 快捷流程按钮
-        btn_keys = ["btn_cadastral", "btn_hydrology", "btn_batch_clip",
-                     "btn_attribute_batch", "btn_thematic_map"]
-        tip_keys = ["tip_cadastral", "tip_hydrology", "tip_batch_clip",
-                     "tip_attribute_batch", "tip_thematic_map"]
-        for i, btn in enumerate(self._offline_buttons):
-            if i < len(btn_keys):
-                btn.setText(lm.tr(btn_keys[i]))
-                btn.setToolTip(lm.tr(tip_keys[i]))
-
-        # 分组面板标题、箭头和 tooltip
-        if hasattr(self, '_vector_toggle_btn'):
-            vec_collapsed = (
-                not hasattr(self, '_vector_button_row')
-                or not self._vector_button_row.isVisible()
-            )
-            vec_arrow = "▶" if vec_collapsed else "▼"
-            self._vector_toggle_btn.setText(
-                f"{vec_arrow} {lm.tr('group_vector_title')}"
-            )
-            self._vector_toggle_btn.setToolTip(
-                lm.tr("btn_expand") if vec_collapsed else lm.tr("btn_collapse")
-            )
-        if hasattr(self, '_raster_toggle_btn'):
-            ras_collapsed = (
-                not hasattr(self, '_raster_button_row')
-                or not self._raster_button_row.isVisible()
-            )
-            ras_arrow = "▶" if ras_collapsed else "▼"
-            self._raster_toggle_btn.setText(
-                f"{ras_arrow} {lm.tr('group_raster_title')}"
-            )
-            self._raster_toggle_btn.setToolTip(
-                lm.tr("btn_expand") if ras_collapsed else lm.tr("btn_collapse")
-            )
 
         # 刷新文件菜单新增项
         if self._save_action:
@@ -930,9 +873,6 @@ class MainWindow(QMainWindow):
         self.run_button.setToolTip(self._lm.tr("btn_run_tip"))
         self.screenshot_button.setEnabled(False)
 
-        for btn in self._offline_buttons:
-            btn.setEnabled(False)
-
         if self.offline_mode_label:
             self.offline_mode_label.setText(" " + self._lm.tr("status_offline"))
             self.offline_mode_label.setStyleSheet("""
@@ -951,9 +891,6 @@ class MainWindow(QMainWindow):
         self.run_button.setToolTip(self._lm.tr("btn_run_tip"))
         self.screenshot_button.setEnabled(self.multimodal_enabled)
 
-        for btn in self._offline_buttons:
-            btn.setEnabled(True)
-
         if self.offline_mode_label:
             self.offline_mode_label.setText(" " + self._lm.tr("status_online"))
             self.offline_mode_label.setStyleSheet("""
@@ -971,9 +908,6 @@ class MainWindow(QMainWindow):
         self.run_button.setEnabled(True)
         self.run_button.setToolTip(self._lm.tr("btn_run_tip"))
         self.screenshot_button.setEnabled(False)
-
-        for btn in self._offline_buttons:
-            btn.setEnabled(False)
 
         if self.offline_mode_label:
             self.offline_mode_label.setText(" " + self._lm.tr("status_hybrid"))
@@ -1750,148 +1684,6 @@ class MainWindow(QMainWindow):
         self.ai_response_display.setToolTip("AI 返回的原始响应内容")
         self.ai_response_display.setFixedHeight(120)
         main_layout.addWidget(self.ai_response_display)
-
-        # ── P1 改造：离线快捷流程按钮组（分组折叠面板） ──
-        offline_row = QHBoxLayout()
-        offline_row.setSpacing(8)
-
-        self._offline_label = QLabel("快捷流程：", container)
-        self._offline_label.setStyleSheet("font-weight: 600; color: #16202a; font-size: 12px;")
-        offline_row.addWidget(self._offline_label)
-
-        # 读取折叠状态
-        collapsed = self.config.offline_group_collapsed
-        vector_collapsed = collapsed.get("vector", False)
-        raster_collapsed = collapsed.get("raster", False)
-
-        # 创建5个工作流按钮（clicked 信号保持原有连接不变）
-        off_btn1 = QPushButton("1. 地籍标准化", container)
-        off_btn1.setToolTip("图层批量转JGD2000 → 拓扑检查修复 → 属性规整 → 导出标准SHP")
-        off_btn1.clicked.connect(lambda: self._on_offline_workflow("cadastral"))
-
-        off_btn2 = QPushButton("2. DEM水文解析", container)
-        off_btn2.setToolTip("洼地填充 → D8流向提取 → 汇流累积 → 河网提取 → 沟壑密度统计")
-        off_btn2.clicked.connect(lambda: self._on_offline_workflow("hydrology"))
-
-        off_btn3 = QPushButton("3. 一括切取+投影", container)
-        off_btn3.setToolTip("多图层批量加载 → 边界裁剪 → 统一JGD2000 → 分类归档")
-        off_btn3.clicked.connect(lambda: self._on_offline_workflow("batch_clip"))
-
-        off_btn4 = QPushButton("4. 属性一括処理", container)
-        off_btn4.setToolTip("条件筛选 → 字段批量赋值 → 导出SHP")
-        off_btn4.clicked.connect(lambda: self._on_offline_workflow("attribute_batch"))
-
-        off_btn5 = QPushButton("5. 主題図一括出力", container)
-        off_btn5.setToolTip("图例/比例尺/指北针 → 统一样式渲染 → 批量PNG/PDF")
-        off_btn5.clicked.connect(lambda: self._on_offline_workflow("thematic_map"))
-
-        self._offline_buttons = [off_btn1, off_btn2, off_btn3, off_btn4, off_btn5]
-
-        # 分组面板样式
-        panel_style = """
-            QFrame#offlineGroupPanel {
-                background: #f8fafc;
-                border: 1px solid #dbe3ec;
-                border-radius: 8px;
-            }
-            QPushButton#groupToggleBtn {
-                background: transparent;
-                border: none;
-                color: #16202a;
-                font-weight: 600;
-                font-size: 12px;
-                text-align: left;
-                padding: 4px 8px;
-                min-width: auto;
-                min-height: auto;
-            }
-            QPushButton#groupToggleBtn:hover {
-                background: #e7edf6;
-                border-radius: 6px;
-            }
-        """
-
-        # ── 矢量批量处理分组 ──
-        vector_panel = QFrame(container)
-        vector_panel.setObjectName("offlineGroupPanel")
-        vector_panel.setStyleSheet(panel_style)
-        vector_layout = QVBoxLayout(vector_panel)
-        vector_layout.setContentsMargins(6, 4, 6, 4)
-        vector_layout.setSpacing(2)
-
-        vec_arrow = "▶" if vector_collapsed else "▼"
-        self._vector_toggle_btn = QPushButton(
-            f"{vec_arrow} 矢量批量处理", container
-        )
-        self._vector_toggle_btn.setObjectName("groupToggleBtn")
-        self._vector_toggle_btn.setToolTip(
-            "展开分组" if vector_collapsed else "折叠分组"
-        )
-        self._vector_toggle_btn.clicked.connect(
-            lambda: self._toggle_offline_group("vector")
-        )
-        vector_layout.addWidget(self._vector_toggle_btn)
-
-        self._vector_button_row = QWidget(container)
-        vec_row_layout = QHBoxLayout(self._vector_button_row)
-        vec_row_layout.setContentsMargins(0, 0, 0, 0)
-        vec_row_layout.setSpacing(4)
-        vec_row_layout.addWidget(off_btn1)   # 1. 地籍标准化
-        vec_row_layout.addWidget(off_btn3)   # 3. 一括切取+投影
-        vec_row_layout.addWidget(off_btn4)   # 4. 属性一括処理
-        vec_row_layout.addWidget(off_btn5)   # 5. 主題図一括出力
-        vec_row_layout.addStretch()
-        self._vector_button_row.setVisible(not vector_collapsed)
-        vector_layout.addWidget(self._vector_button_row)
-
-        offline_row.addWidget(vector_panel)
-
-        # ── 栅格地形分析分组 ──
-        raster_panel = QFrame(container)
-        raster_panel.setObjectName("offlineGroupPanel")
-        raster_panel.setStyleSheet(panel_style)
-        raster_layout = QVBoxLayout(raster_panel)
-        raster_layout.setContentsMargins(6, 4, 6, 4)
-        raster_layout.setSpacing(2)
-
-        ras_arrow = "▶" if raster_collapsed else "▼"
-        self._raster_toggle_btn = QPushButton(
-            f"{ras_arrow} 栅格地形分析", container
-        )
-        self._raster_toggle_btn.setObjectName("groupToggleBtn")
-        self._raster_toggle_btn.setToolTip(
-            "展开分组" if raster_collapsed else "折叠分组"
-        )
-        self._raster_toggle_btn.clicked.connect(
-            lambda: self._toggle_offline_group("raster")
-        )
-        raster_layout.addWidget(self._raster_toggle_btn)
-
-        self._raster_button_row = QWidget(container)
-        ras_row_layout = QHBoxLayout(self._raster_button_row)
-        ras_row_layout.setContentsMargins(0, 0, 0, 0)
-        ras_row_layout.setSpacing(4)
-        ras_row_layout.addWidget(off_btn2)   # 2. DEM水文解析
-        ras_row_layout.addStretch()
-        self._raster_button_row.setVisible(not raster_collapsed)
-        raster_layout.addWidget(self._raster_button_row)
-
-        offline_row.addWidget(raster_panel)
-        offline_row.addStretch()
-        main_layout.addLayout(offline_row)
-
-        # P2 改造：隐藏快捷按钮区域
-        self._offline_label.setVisible(False)
-        vector_panel.setVisible(False)
-        raster_panel.setVisible(False)
-
-        # 断开所有离线按钮信号
-        for btn in self._offline_buttons:
-            try:
-                btn.clicked.disconnect()
-            except Exception:
-                pass
-
         return container
 
     def _apply_styles(self) -> None:
@@ -2817,6 +2609,7 @@ class MainWindow(QMainWindow):
         mgr = get_skill_manager()
         user_text = self.ai_prompt_input.toPlainText().strip()
         all_success = True
+        has_warning = False  # P2-3: degraded 步骤标记，状态栏显示"完成但有警告"
         summary_parts: List[str] = []
 
         for i, step in enumerate(pipeline):
@@ -2832,16 +2625,50 @@ class MainWindow(QMainWindow):
                     offline_args = json.loads(arguments) if isinstance(arguments, str) else arguments
                     offline_msg = offline_args.get("message", "")
                     offline_success = offline_args.get("success", False)
+                    offline_status = offline_args.get("status", "ok" if offline_success else "failed")
                     output_file = offline_args.get("output_file", "")
                 except Exception:
                     offline_msg = str(arguments)
                     offline_success = False
+                    offline_status = "failed"
                     output_file = ""
                 self.ai_response_display.setPlainText(offline_msg)
-                self.statusBar().showMessage(
-                    "离线模式 — 指令已执行" if offline_success else "离线模式 — 问答",
-                    5000,
-                )
+                # P2-3: 离线分支同样按 status 区分（degraded → ⚠️ + warning 弹窗）
+                if offline_status == "degraded":
+                    from core.result_contract import derive_status_message
+                    warn_msg = derive_status_message(
+                        status="degraded",
+                        step_index=i + 1,
+                        step_id=skill_name,
+                        reason=offline_msg,
+                    )["content"]
+                    self.ai_response_display.append(f"\n⚠️ {warn_msg}")
+                    QMessageBox.warning(
+                        self,
+                        f"流水线 [{i+1}] {skill_name}（完成但有警告）",
+                        warn_msg,
+                    )
+                    self.statusBar().showMessage("离线模式 — 完成但有警告", 5000)
+                elif offline_status == "failed" or not offline_success:
+                    from core.result_contract import derive_status_message
+                    err_msg = derive_status_message(
+                        status="failed",
+                        step_index=i + 1,
+                        step_id=skill_name,
+                        reason=offline_msg,
+                    )["content"]
+                    self.ai_response_display.append(f"\n❌ {err_msg}")
+                    QMessageBox.warning(
+                        self,
+                        f"流水线 [{i+1}] {skill_name}",
+                        err_msg,
+                    )
+                    self.statusBar().showMessage("离线模式 — 执行失败", 5000)
+                else:
+                    self.statusBar().showMessage(
+                        "离线模式 — 指令已执行" if offline_success else "离线模式 — 问答",
+                        5000,
+                    )
                 # 自动加载管道输出的图层文件
                 if output_file and os.path.exists(output_file):
                     self._add_layer_from_file(output_file)
@@ -2881,13 +2708,37 @@ class MainWindow(QMainWindow):
             )
 
             if not result.get("success"):
+                from core.result_contract import derive_status_message
                 err_msg = result.get("message", "未知错误")
+                err_full = derive_status_message(
+                    status="failed",
+                    step_index=i + 1,
+                    step_id=skill_name,
+                    reason=err_msg,
+                )["content"]
                 QMessageBox.information(
-                    self, f"流水线 [{i+1}] {skill_name}", err_msg
+                    self, f"流水线 [{i+1}] {skill_name}", err_full
                 )
                 all_success = False
-                summary_parts.append(f"❌ [{i+1}] {skill_name}: {err_msg}")
+                summary_parts.append(f"❌ {err_full}")
                 break
+
+            # P2-3: 识别 degraded 状态（输出为空/结构异常但仍完成）
+            step_status = result.get("status", "ok")
+            if step_status == "degraded":
+                has_warning = True
+                from core.result_contract import derive_status_message
+                warn_msg = derive_status_message(
+                    status="degraded",
+                    step_index=i + 1,
+                    step_id=skill_name,
+                    reason=result.get("message", ""),
+                )["content"]
+                QMessageBox.warning(
+                    self,
+                    f"流水线 [{i+1}] {skill_name}（完成但有警告）",
+                    warn_msg,
+                )
 
             # 处理技能结果
             if skill_name == "open_table":
@@ -2913,8 +2764,9 @@ class MainWindow(QMainWindow):
                         self.map_canvas.setExtent(combined_extent)
                     self.map_canvas.refresh()
                 layer_names = result.get("layer_names", [])
+                _step_prefix = "⚠️" if step_status == "degraded" else "✅"
                 summary_parts.append(
-                    f"✅ [{i+1}] {skill_name} → 加载了 {len(loaded)} 个图层"
+                    f"{_step_prefix} [{i+1}] {skill_name} → 加载了 {len(loaded)} 个图层"
                 )
                 if layer_names:
                     pipeline_context["last_output_layers"] = layer_names
@@ -2924,16 +2776,19 @@ class MainWindow(QMainWindow):
             elif skill_name == "layer_styling":
                 styled_layers = result.get("styled_layers", [])
                 names = ", ".join(l.name() for l in styled_layers) if styled_layers else "?"
-                summary_parts.append(f"✅ [{i+1}] {skill_name} → {names}")
+                _step_prefix = "⚠️" if step_status == "degraded" else "✅"
+                summary_parts.append(f"{_step_prefix} [{i+1}] {skill_name} → {names}")
 
             elif skill_name == "map_export":
+                _step_prefix = "⚠️" if step_status == "degraded" else "✅"
                 summary_parts.append(
-                    f"✅ [{i+1}] {skill_name} → {result.get('message', '完成')}"
+                    f"{_step_prefix} [{i+1}] {skill_name} → {result.get('message', '完成')}"
                 )
 
             else:
+                _step_prefix = "⚠️" if step_status == "degraded" else "✅"
                 summary_parts.append(
-                    f"✅ [{i+1}] {skill_name} → {result.get('message', '完成')}"
+                    f"{_step_prefix} [{i+1}] {skill_name} → {result.get('message', '完成')}"
                 )
 
             # 收集新增图层并传递到上下文（open_project 已在上面单独处理）
@@ -2955,7 +2810,9 @@ class MainWindow(QMainWindow):
         final_summary = "\n".join(summary_parts) if summary_parts else "流水线已完成。"
         self.ai_response_display.append(f"\n--- 流水线结果 ---\n{final_summary}")
 
-        if all_success:
+        if all_success and has_warning:
+            self.statusBar().showMessage("流水线完成但有警告", 6000)
+        elif all_success:
             self.statusBar().showMessage(f"流水线完成（{len(pipeline)} 步）", 6000)
         else:
             self.statusBar().showMessage("流水线部分失败", 6000)
@@ -2969,14 +2826,19 @@ class MainWindow(QMainWindow):
         )
         persist_conversation_turn()
 
-        # 自动保存 .qgz 工程
-        if all_success:
+        # 自动保存 .qgz 工程（P2-3：degraded 时保留"完成但有警告"状态栏，不覆盖）
+        if all_success and not has_warning:
             project_path = style_manager.save_project()
             if project_path:
                 self.statusBar().showMessage(
                     "AIQGIS 已自动完成高颜值制图！可直接双击打开工程文件排版打印。",
                     8000,
                 )
+        elif all_success and has_warning:
+            try:
+                style_manager.save_project()
+            except Exception as _e:
+                _log.warning("degraded 场景自动保存工程失败: %s", _e)
 
         _log.info("流水线执行结束，记忆已持久化")
 
@@ -3027,150 +2889,13 @@ class MainWindow(QMainWindow):
                 self._zoom_to_layers(added)
 
         except Exception as exc:
-            _log.exception("AI 响应处理异常，进入回退执行")
-            self._fallback_legacy_execution(response_text, exc)
+            _log.exception("AI 响应处理异常")
+            self.statusBar().showMessage(f"AI 响应处理失败: {exc}", 6000)
+            QMessageBox.critical(self, "AI 响应处理失败", str(exc))
 
 
     # ══════════════════════════════════════════════════════════
-    # SandboxExecutionWorker 信号槽网络（Pain 2 自愈循环）
-    # ══════════════════════════════════════════════════════════
-
-    def _launch_sandbox_worker(
-        self,
-        code: str,
-        active_layer=None,
-        layers_by_name=None,
-        user_text: str = "",
-    ) -> None:
-        """创建并启动 SandboxExecutionWorker（异步，不阻塞 UI 线程）。
-
-        Phase 5 Block 1: 此方法已停用于在线模式。在线 LLM 不再生成 PyQGIS
-        代码，统一走 InstructionMapper.match_and_execute() 确定性执行。
-        
-        保留以备审计。误调用时抛出 NotImplementedError。
-        """
-        raise NotImplementedError(
-            "Phase 5 Block 1 后 Sandbox 已停用于在线模式。"
-            "在线/离线统一走 InstructionMapper.match_and_execute()。"
-        )
-        import builtins
-        import processing
-
-        # 防御：自动清洗 AI 误输出的 iface 引用（独立应用无 iface）
-        if re.search(r'\biface\b', code):
-            _log.warning("AI 代码含 iface 引用，自动清洗")
-            code = re.sub(
-                r'iface\.addMapLayer\((\w+)\)',
-                r'QgsProject.instance().addMapLayer(\1)',
-                code
-            )
-            code = re.sub(
-                r'iface\.activeLayer\(\)',
-                r'active_layer',
-                code
-            )
-            code = re.sub(
-                r'iface\.mapCanvas\(\).refresh(AllLayers)?\(\)',
-                r'pass  # iface.mapCanvas() stripped',
-                code
-            )
-            code = re.sub(
-                r'^\s*iface\..+$',
-                r'pass  # auto-stripped iface call',
-                code,
-                flags=re.MULTILINE
-            )
-
-        self._sandbox_retry_count = 0
-        self._sandbox_force_numpy_gdal = False
-        self._sandbox_original_code = code
-        self._sandbox_user_text = user_text
-
-        exec_globals = {
-            "__builtins__": builtins.__dict__,
-            "processing": processing,
-            "QgsProject": QgsProject,
-            "QgsVectorLayer": QgsVectorLayer,
-            "QgsRasterLayer": QgsRasterLayer,
-            "QgsMapLayer": QgsMapLayer,
-            "QgsCoordinateReferenceSystem": QgsCoordinateReferenceSystem,
-            "QgsCoordinateTransform": QgsCoordinateTransform,
-            "QgsFeature": QgsFeature,
-            "QgsGeometry": QgsGeometry,
-            "QgsPointXY": QgsPointXY,
-            "QgsField": QgsField,
-            "QgsFields": QgsFields,
-            "active_layer": active_layer,
-            "layers_by_name": layers_by_name or {},
-            "generate_output_path": generate_output_path,
-            "generate_geojson_output_path": generate_geojson_output_path,
-            "style_manager": style_manager,
-            "os": os,
-            "tempfile": tempfile,
-        }
-
-        # ── PROJ_LIB 兜底：沙箱内 numpy/gdal 手写算法需要 proj.db ──
-        _proj_lib = os.environ.get("PROJ_LIB", "")
-        if not _proj_lib:
-            # 运行时推导 — 不再硬编码绝对路径
-            _project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            _proj_lib = os.path.join(_project_root, "qgis-portable", "share", "proj")
-            if os.path.isdir(_proj_lib):
-                os.environ["PROJ_LIB"] = _proj_lib
-                exec_globals["_proj_lib_path"] = _proj_lib
-
-        self._create_and_start_worker(code, exec_globals, active_layer, layers_by_name, 0)
-
-    def _create_and_start_worker(
-        self,
-        code: str,
-        exec_globals: Dict[str, Any],
-        active_layer,
-        layers_by_name,
-        retry_count: int,
-    ) -> None:
-        """实例化 SandboxExecutionWorker、连接信号并启动。"""
-        if self._sandbox_worker is not None:
-            # 断开旧 Worker 所有信号，防止 stale callback
-            for sig_name in ("progress", "stdout_line", "finished", "error", "fix_needed"):
-                sig = getattr(self._sandbox_worker, sig_name, None)
-                if sig is not None:
-                    try:
-                        sig.disconnect()
-                    except TypeError:
-                        pass
-
-            if self._sandbox_worker.isRunning():
-                self._sandbox_worker.quit()
-                self._sandbox_worker.wait(500)
-
-            self._sandbox_worker.deleteLater()
-            self._sandbox_worker = None
-
-        self._sandbox_worker = SandboxExecutionWorker(
-            code=code,
-            exec_globals=exec_globals,
-            active_layer=active_layer,
-            layers_by_name=layers_by_name or {},
-            user_query=self._sandbox_user_text,
-            retry_count=retry_count,
-        )
-        self._sandbox_worker.progress.connect(self._on_sandbox_progress)
-        self._sandbox_worker.stdout_line.connect(self._on_sandbox_stdout)
-        self._sandbox_worker.finished.connect(self._on_sandbox_finished)
-        self._sandbox_worker.error.connect(self._on_sandbox_error)
-        self._sandbox_worker.fix_needed.connect(self._on_sandbox_fix_needed)
-        self._sandbox_worker.start()
-
     # ── 信号槽 ──
-
-    def _on_sandbox_progress(self, msg: str) -> None:
-        """Worker 进度通知 → 状态栏。"""
-        self.statusBar().showMessage(msg, 3000)
-
-    def _on_sandbox_stdout(self, line: str) -> None:
-        """Worker 中 print() 输出 → AI 控制台实时回显。"""
-        self.ai_response_display.append(f"[沙箱] {line}")
 
     # ══════════════════════════════════════════════════════════
     # 任务编排器（复合任务串行传送带）
@@ -3297,306 +3022,6 @@ class MainWindow(QMainWindow):
         return re.sub(r"\{([^}]+)\}", _replace, raw_value)
 
     # ══════════════════════════════════════════════════════════
-
-    def _on_sandbox_finished(self, result: dict) -> None:
-        """执行成功：注册图层、刷新画布、保存工程、持久化历史。"""
-        pending_layers = result.get("pending_layers", [])
-        raw_result = result.get("result")
-        gc_removed = result.get("gc_removed", [])
-
-        # Monkey-patch 拦截的图层 → 主线程安全加载
-        for lyr in pending_layers:
-            try:
-                if QgsProject.instance().mapLayer(lyr.id()) is None:
-                    QgsProject.instance().addMapLayer(lyr)
-            except Exception:
-                pass
-
-        if gc_removed:
-            self.statusBar().showMessage(f"GC 清除 {len(gc_removed)} 个中间图层", 3000)
-
-        # 注册结果图层
-        try:
-            added_layers = self._register_result_layers(raw_result or {})
-        except RuntimeError:
-            added_layers = []
-
-        if added_layers:
-            self._zoom_to_layers(added_layers)
-            layer_names = ", ".join(lyr.name() for lyr in added_layers)
-
-            # ── 任务编排器：捕获当前步骤的输出图层名，供下游步骤动态注入 ──
-            if self._task_pipeline and self._task_pipeline_index < len(self._task_pipeline):
-                current_step = self._task_pipeline[self._task_pipeline_index]
-                step_num = current_step.get("step", self._task_pipeline_index + 1)
-                primary_name = added_layers[0].name() if added_layers else ""
-                self._task_pipeline_outputs[step_num] = primary_name
-                _log.info(
-                    "流水线输出捕获：step %d → 「%s」",
-                    step_num, primary_name,
-                )
-
-            project_path = style_manager.save_project()
-            self.statusBar().showMessage(
-                "AIQGIS 已自动完成高颜值制图！可直接双击打开工程文件排版打印。",
-                8000,
-            )
-            self.ai_response_display.append(
-                f"\n📦 工程已保存: {project_path}" if project_path
-                else "\n⚠ 工程保存失败，请检查 output/projects/ 目录权限"
-            )
-            append_to_history("user", self._sandbox_user_text)
-            append_to_history("assistant", f"空间分析完成，新增图层：{layer_names}")
-            append_to_history(
-                "system",
-                "[System Notification]: Spatial analysis skill executed successfully. "
-                "New layers added to canvas.",
-            )
-            persist_conversation_turn()
-        elif raw_result:
-            project_path = style_manager.save_project()
-            self.statusBar().showMessage(
-                "AIQGIS 已自动完成高颜值制图！可直接双击打开工程文件排版打印。",
-                8000,
-            )
-            self.ai_response_display.append(
-                f"\n工程已保存: {project_path}" if project_path
-                else "\n工程保存失败"
-            )
-            append_to_history("user", self._sandbox_user_text)
-            append_to_history("assistant", "空间分析完成（无新增图层）")
-            append_to_history(
-                "system",
-                "[System Notification]: Spatial analysis skill executed successfully. "
-                "No new layers added.",
-            )
-            persist_conversation_turn()
-        else:
-            self.statusBar().showMessage("代码已执行（未生成新图层）。", 6000)
-
-        # ── 任务编排器：流水线续行 ──
-        self._check_and_continue_pipeline()
-
-    def _check_and_continue_pipeline(self) -> None:
-        """检查复合任务流水线是否还有剩余步骤，如有则自动触发下一步。
-
-        由 _on_sandbox_finished 在每个步骤成功后调用。
-        """
-        if not self._task_pipeline:
-            return
-
-        self._task_pipeline_index += 1
-        total = len(self._task_pipeline)
-
-        if self._task_pipeline_index >= total:
-            # 流水线完成
-            _log.info("复合任务流水线全部完成（%d 步）", total)
-            self.statusBar().showMessage(
-                f"复合任务流水线全部完成（共 {total} 步）", 8000
-            )
-            self.ai_response_display.append(
-                f"\n[流水线] 全部 {total} 步执行完毕。"
-            )
-            # 清理流水线状态
-            self._task_pipeline = []
-            self._task_pipeline_index = 0
-            self._task_pipeline_user_text = ""
-            self._task_pipeline_layer_metadata = []
-            self._task_pipeline_outputs = {}
-            return
-
-        next_step = self._task_pipeline[self._task_pipeline_index]
-        desc = next_step.get("description", next_step.get("action", "?"))
-        self.statusBar().showMessage(
-            f"[{self._task_pipeline_index + 1}/{total}] 正在自动执行下一步：{desc}..."
-        )
-        self.ai_response_display.append(
-            f"\n--- [流水线 {self._task_pipeline_index + 1}/{total}] {desc} ---"
-        )
-        self._execute_next_pipeline_step()
-
-    def _on_sandbox_fix_needed(self, fix_context: dict) -> None:
-        """自愈循环入口：收到 fix_needed 信号后回炉 LLM 获取修正代码。
-
-        Pain 2 核心：调用方编排重试循环，最大 3 次。
-        """
-        MAX_RETRY = 3
-        retry_count = fix_context.get("retry_count", 0)
-
-        # ── 环境缺失型异常检测（前缀感知） ──
-        # 当报错消息包含 "Algorithm .* not found" 时，判定为外部算子缺失，
-        # 在异常消息末尾追加环境降级指引，确保 LLM 回炉时得到明确降级方向。
-        _original_msg = fix_context.get("exception_msg", "")
-        _algo_match = re.search(r"Algorithm\s+(\S+)\s+not found", _original_msg)
-        if _algo_match:
-            _missing_algo = _algo_match.group(1)
-            _missing_prefix = _missing_algo.split(":")[0] if ":" in _missing_algo else ""
-            _log.warning(
-                "环境缺失型异常检测命中: %s（当前环境无此算子，前缀=%s）",
-                _missing_algo, _missing_prefix or "(无)",
-            )
-            # ── 前缀感知指引：native 缺算子 ≠ grass7 缺算子 ──
-            if _missing_prefix == "native":
-                _suffix = (
-                    "\n\n【环境诊断】当前 QGIS 不存在原生算子「{algo}」。"
-                    "可能原因：算法名拼写错误（QGIS 原生算子的 ID 不使用下划线分割单词），"
-                    "或此版本的 QGIS 未内置该算法。"
-                    "\n请尝试：1) 修正算法名拼写 2) 改用 SAGA 等效算子（如 saga:fillsinksxxlwangbrennan）"
-                    " 3) 若均不可用，用 numpy/gdal 手写算法实现。"
-                    "\n严禁再次尝试相同算法 ID。"
-                ).format(algo=_missing_algo)
-            else:
-                _suffix = (
-                    "\n\n【环境诊断】当前便携版 QGIS 环境缺少算子「{algo}」。"
-                    "请立即放弃使用任何「{prefix}」前缀的算法，改用 native: 原生等效算子。"
-                    "若原生算子也不可用，请用 numpy/gdal 手写算法实现。"
-                    "严禁再次尝试相同算法 ID 或同前缀的其他算法。"
-                ).format(algo=_missing_algo, prefix=_missing_prefix)
-            fix_context["exception_msg"] = _original_msg + _suffix
-            # ── 追踪强制降级状态：仅 native/saga 前缀算子不存在时置位，gdal/grass 等不做强制降级 ──
-            if retry_count >= 1 and _missing_prefix in ("native", "saga"):
-                self._sandbox_force_numpy_gdal = True
-            # 若为 grass7: 丢失，同时在 user_query 中注入提示
-            if "grass7" in _missing_algo.lower():
-                fix_context["user_query"] = (
-                    fix_context.get("user_query", "") +
-                    " [环境提示：grass7 算子库不存在，请用 native: 替代]"
-                )
-
-        # ── 强制降级持久化：一旦标记过，后续所有 retry 必须阻止回归 processing ──
-        if self._sandbox_force_numpy_gdal:
-            _regression_block = (
-                "\n\n【强制降级续】之前的重试已确认 native: 和 SAGA 等效算子均不存在。"
-                "你当前使用的是 numpy/gdal 手写方案。"
-                "请修正 numpy/gdal 代码中的错误（如 proj.db 缺失时设置 os.environ['PROJ_LIB']），"
-                "严禁回到 processing.run() 调用任何算法。"
-            )
-            fix_context["exception_msg"] = fix_context.get("exception_msg", "") + _regression_block
-
-        # HeatmapRenderSuccessException → 视为成功
-        if "HeatmapRender" in fix_context.get("exception_type", ""):
-            self.statusBar().showMessage("前端热力图渲染完成", 5000)
-            return
-
-        if retry_count >= MAX_RETRY:
-            # ── 任务编排器：终端失败 → 清空流水线，防止污染后续步骤 ──
-            if self._task_pipeline:
-                current_idx = self._task_pipeline_index
-                current_step = self._task_pipeline[current_idx] if current_idx < len(self._task_pipeline) else {}
-                desc = current_step.get("description", current_step.get("action", "?"))
-                _log.error(
-                    "流水线步骤 [%d/%d]「%s」彻底失败，清空整个流水线",
-                    current_idx + 1, len(self._task_pipeline), desc,
-                )
-                self.ai_response_display.append(
-                    f"\n[流水线] 步骤「{desc}」经 {MAX_RETRY} 次自愈后仍然失败，"
-                    f"流水线已中断，剩余 {len(self._task_pipeline) - current_idx - 1} 步已取消。"
-                )
-                self._task_pipeline = []
-                self._task_pipeline_index = 0
-                self._task_pipeline_user_text = ""
-                self._task_pipeline_layer_metadata = []
-                self._task_pipeline_outputs = {}
-
-            self.statusBar().showMessage("空间分析失败（已达最大重试次数）", 5000)
-            QMessageBox.warning(
-                self,
-                "分析失败",
-                f"代码执行 {MAX_RETRY} 次后仍然失败。\n"
-                f"错误: {fix_context.get('exception_msg', '未知')}\n\n"
-                f"请简化需求或手动调整参数后重试。",
-            )
-            return
-
-        self.statusBar().showMessage(
-            f"正在自愈修正（第 {retry_count + 1}/{MAX_RETRY} 次）..."
-        )
-
-        try:
-            response = request_code_fix(
-                broken_code=fix_context["broken_code"],
-                error_line=fix_context["error_line"],
-                exception_type=fix_context["exception_type"],
-                exception_msg=fix_context["exception_msg"],
-                user_query=fix_context["user_query"],
-                retry_count=retry_count,
-            )
-            fixed_code = self._extract_python_code(response)
-            self.ai_response_display.append(
-                f"\n--- 自愈修正（第 {retry_count + 1} 次）---\n{fixed_code[:300]}..."
-            )
-
-            # 重建 exec_globals
-            import builtins
-            import processing
-
-            active_layer = self._get_active_layer()
-            layers_by_name = {
-                layer.name(): layer
-                for layer in QgsProject.instance().mapLayers().values()
-            }
-            exec_globals = {
-                "__builtins__": builtins.__dict__,
-                "processing": processing,
-                "QgsProject": QgsProject,
-                "QgsVectorLayer": QgsVectorLayer,
-                "QgsRasterLayer": QgsRasterLayer,
-                "QgsMapLayer": QgsMapLayer,
-                "QgsCoordinateReferenceSystem": QgsCoordinateReferenceSystem,
-                "QgsCoordinateTransform": QgsCoordinateTransform,
-                "QgsFeature": QgsFeature,
-                "QgsGeometry": QgsGeometry,
-                "QgsPointXY": QgsPointXY,
-                "QgsField": QgsField,
-                "QgsFields": QgsFields,
-                "active_layer": active_layer,
-                "layers_by_name": layers_by_name,
-                "generate_output_path": generate_output_path,
-                "generate_geojson_output_path": generate_geojson_output_path,
-                "style_manager": style_manager,
-                "os": os,
-                "tempfile": tempfile,
-            }
-
-            self._create_and_start_worker(
-                fixed_code, exec_globals, active_layer, layers_by_name, retry_count + 1
-            )
-        except Exception as exc:
-            self.statusBar().showMessage("自愈修正失败", 3000)
-            QMessageBox.warning(self, "自愈失败", f"代码修正请求失败: {exc}")
-
-    def _on_sandbox_error(self, msg: str) -> None:
-        """Worker 致命错误（非代码级，如 Worker 自身崩溃）。"""
-        self.statusBar().showMessage("空间分析执行失败", 5000)
-        QMessageBox.warning(self, "沙箱错误", msg)
-
-    def _fallback_legacy_execution(self, response_text: str, original_error: Exception) -> None:
-        """回退：尝试旧版 Python 代码块提取。"""
-        try:
-            code = self._extract_python_code(response_text)
-            self.last_ai_code = code
-            if not self.skip_preview:
-                result = AiCodePreviewDialog.preview_and_execute(
-                    self, code, self.ai_prompt_input.toPlainText().strip()
-                )
-                if result is None:
-                    return
-                code, _ = result
-
-            # 异步启动沙箱 Worker，结果通过信号槽网络返回
-            active_layer = self._get_active_layer()
-            layers_by_name = {
-                layer.name(): layer
-                for layer in QgsProject.instance().mapLayers().values()
-            }
-            self._launch_sandbox_worker(
-                code=code,
-                active_layer=active_layer,
-                layers_by_name=layers_by_name,
-                user_text=self.ai_prompt_input.toPlainText().strip(),
-            )
-        except Exception as exc:
-            QMessageBox.critical(self, "执行失败", f"{exc}\n\n原始错误：{original_error}")
 
     def _handle_ai_error(self, error_message: str) -> None:
         """显示 API 或工作线程错误信息（中文）。"""
@@ -3844,139 +3269,4 @@ class MainWindow(QMainWindow):
         if all(existing.id() != layer.id() for existing in added_layers):
             added_layers.append(layer)
 
-    # ══════════════════════════════════════════════════════════
-    # P1 改造：离线快捷流程
-    # ══════════════════════════════════════════════════════════
-
-    # 离线工作流映射
-    _WORKFLOW_MAP = {
-        "cadastral": ("地籍标准化", "run_cadastral_standardization", {}),
-        "hydrology": ("DEM水文解析", "run_dem_hydrological_analysis", {}),
-        "batch_clip": ("一括切取+投影", "run_batch_clip_project", {}),
-        "attribute_batch": ("属性一括処理", "run_vector_attribute_batch", {}),
-        "thematic_map": ("主題図一括出力", "run_thematic_map_export", {}),
-    }
-
-    def _on_offline_workflow(self, workflow_key: str) -> None:
-        """P1 改造：离线快捷流程按钮回调。
-
-        在 QThread 中执行硬编码 PyQGIS 管道，不经过 LLM 解析。
-        """
-
-        if workflow_key not in self._WORKFLOW_MAP:
-            QMessageBox.warning(self, "未知工作流", f"未识别的流程键：{workflow_key}")
-            return
-
-        wf_name, fn_name, extra_kwargs = self._WORKFLOW_MAP[workflow_key]
-
-        try:
-            from core.offline_workflows import OfflineWorkflowWorker
-            import core.offline_workflows as ow
-
-            fn = getattr(ow, fn_name, None)
-            if fn is None:
-                raise ImportError(f"无法加载离线工作流函数: {fn_name}")
-        except Exception as exc:
-            QMessageBox.critical(self, "加载失败", f"无法加载离线工作流模块：{exc}")
-            return
-
-        # 禁用所有按钮，避免重复点击
-        self.run_button.setEnabled(False)
-        self.screenshot_button.setEnabled(False)
-        for btn in self._offline_buttons:
-            btn.setEnabled(False)
-
-        self.statusBar().showMessage(f"正在执行离线快捷流程：{wf_name}...")
-        self.ai_response_display.setPlainText(f"[离线模式] 正在执行：{wf_name}...\n")
-
-        self._offline_worker = OfflineWorkflowWorker(
-            workflow_fn=fn,
-            **extra_kwargs,
-        )
-        self._offline_worker.progress.connect(self._on_offline_progress)
-        self._offline_worker.finished.connect(self._on_offline_finished)
-        self._offline_worker.error.connect(self._on_offline_error)
-        self._offline_worker.start()
-
-    def _on_offline_progress(self, msg: str) -> None:
-        """离线工作流进度回调。"""
-        current = self.ai_response_display.toPlainText()
-        self.ai_response_display.setPlainText(current + msg + "\n")
-        # 滚动到底部
-        scrollbar = self.ai_response_display.verticalScrollBar()
-        if scrollbar:
-            scrollbar.setValue(scrollbar.maximum())
-        self.statusBar().showMessage(msg, 0)
-
-        # P2：确保进度条可见
-        if hasattr(self, '_offline_progress_bar') and not self._offline_progress_bar.isVisible():
-            self._offline_progress_bar.setVisible(True)
-
-    def _on_offline_finished(self, result: dict) -> None:
-        """离线工作流完成回调。"""
-        self._restore_offline_ui()
-
-        msg = "\n离线快捷流程执行完成！\n"
-        if result.get("output_dir"):
-            msg += f"输出目录：{result['output_dir']}\n"
-        if result.get("results"):
-            for r in result["results"]:
-                if isinstance(r, dict):
-                    msg += f"  - {r.get('layer_name', r.get('layer', ''))} → {r.get('output', r.get('path', ''))}\n"
-
-        self.ai_response_display.append(msg)
-        self.statusBar().showMessage("离线快捷流程执行完成。", 8000)
-
-    def _on_offline_error(self, msg: str) -> None:
-        """离线工作流错误回调。"""
-        self._restore_offline_ui()
-        self.ai_response_display.append(f"\n执行失败：\n{msg}")
-        self.statusBar().showMessage("离线快捷流程执行失败。", 8000)
-        QMessageBox.critical(self, "离线流程错误", msg)
-
-    def _restore_offline_ui(self) -> None:
-        """恢复离线工作流按钮状态。"""
-        if self.offline_mode:
-            self.run_button.setEnabled(False)
-            self.screenshot_button.setEnabled(False)
-        else:
-            self.run_button.setEnabled(True)
-            self.screenshot_button.setEnabled(self.multimodal_enabled)
-        for btn in self._offline_buttons:
-            btn.setEnabled(True)
-        self._offline_worker = None
-
-        # P2：隐藏进度条
-        if hasattr(self, '_offline_progress_bar'):
-            self._offline_progress_bar.setVisible(False)
-
-    def _toggle_offline_group(self, group: str) -> None:
-        """切换离线快捷流程分组折叠状态，并持久化到配置。"""
-        if group == "vector":
-            currently_visible = self._vector_button_row.isVisible()
-            new_collapsed = currently_visible
-            self._vector_button_row.setVisible(not currently_visible)
-            arrow = "▶" if new_collapsed else "▼"
-            lm = lang_manager()
-            self._vector_toggle_btn.setText(
-                f"{arrow} {lm.tr('group_vector_title')}"
-            )
-            self._vector_toggle_btn.setToolTip(
-                lm.tr("btn_expand") if new_collapsed else lm.tr("btn_collapse")
-            )
-        else:
-            currently_visible = self._raster_button_row.isVisible()
-            new_collapsed = currently_visible
-            self._raster_button_row.setVisible(not currently_visible)
-            arrow = "▶" if new_collapsed else "▼"
-            lm = lang_manager()
-            self._raster_toggle_btn.setText(
-                f"{arrow} {lm.tr('group_raster_title')}"
-            )
-            self._raster_toggle_btn.setToolTip(
-                lm.tr("btn_expand") if new_collapsed else lm.tr("btn_collapse")
-            )
-
-        collapsed = self.config.offline_group_collapsed
-        collapsed[group] = new_collapsed
-        self.config.offline_group_collapsed = collapsed
+    # ══════════════════════════════════════════════════════════
