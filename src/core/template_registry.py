@@ -294,6 +294,39 @@ _INSTRUCTION_TEMPLATES: List[Dict[str, Any]] = [
         "handler": "_handle_building_risk_analysis",
         "params": {"intensity_layer": "", "population_layer": "", "population_field": "", "intensity_field": "", "boundary_layer": ""},
     },
+    # ── P3-1 新增：工作区 manifest ──
+    {
+        "action": "workspace_new",
+        "zh": ["新建.*工作区", "创建.*工作区"],
+        "ja": ["ワークスペースを新規作成", "ワークスペースを作成", "新規.*ワークスペース"],
+        "en": ["create workspace", "new workspace"],
+        "handler": "_handle_workspace_new",
+        "params": {"name": "", "country": "jp"},
+    },
+    {
+        "action": "workspace_save",
+        "zh": ["保存.*工作区", "更新.*工作区"],
+        "ja": ["ワークスペースを保存", "ワークスペース保存"],
+        "en": ["save workspace", "update workspace"],
+        "handler": "_handle_workspace_save",
+        "params": {"workspace_id": ""},
+    },
+    {
+        "action": "workspace_open",
+        "zh": ["打开.*工作区", "恢复.*工作区", "加载.*工作区"],
+        "ja": ["ワークスペースを開く", "ワークスペースをロード"],
+        "en": ["open workspace", "load workspace", "restore workspace"],
+        "handler": "_handle_workspace_open",
+        "params": {"workspace_id": ""},
+    },
+    {
+        "action": "workspace_list",
+        "zh": ["列出.*工作区", "工作区列表", "有哪些工作区"],
+        "ja": ["ワークスペース一覧", "ワークスペースリスト"],
+        "en": ["list workspace", "workspace list"],
+        "handler": "_handle_workspace_list",
+        "params": {},
+    },
 ]
 
 # ── 系统提示词（离线模式用）─────────────────────────────
@@ -341,6 +374,10 @@ gap_analysis — 盲区分析 {"source_layer":"源点图层","boundary_layer":"�
 population_coverage — 人口覆盖率 {"source_layer":"源点图层","boundary_layer":"边界面图层","population_layer":"人口面图层","population_field":"人口字段","radius_m":500.0,"selected_only":false}；触发词：人口覆盖/覆盖人口/人口覆盖率/覆盖了多少人
 seismic_situation_map — 震度态势图 {"output_path":"路径","dpi":300}；触发词：震度态势图/态势图
 building_risk_analysis — 建筑风险 {"intensity_layer":"震度图层","population_layer":"人口图层","population_field":"人口字段","intensity_field":"震度字段","boundary_layer":"边界图层"}；触发词：建筑风险/倒塌风险/受灾人口
+workspace_new — 新建工作区 {"name":"工作区名称","country":"jp"}；触发词：新建/创建工作区
+workspace_save — 保存工作区 {"workspace_id":"工作区id"}；触发词：保存工作区
+workspace_open — 打开工作区 {"workspace_id":"工作区id"}；触发词：打开/恢复工作区
+workspace_list — 列出工作区（无参数）；触发词：列出工作区/工作区列表
 
 【示例】
 用户："加载 D:/data/roads.shp"
@@ -376,7 +413,7 @@ _SYSTEM_PROMPT_JA = """あなたは GIS デスクトップアシスタントで�
 対応操作：load_layer, save_project, export_map, zoom_to_layer, zoom_in, zoom_out,
 remove_layer, list_layers, identify_feature, set_crs, show_crs, reproject_layer,
 toggle_editing, select_feature, reset_view, set_layer_style, load_layer_style,
-filter_layer, export_attribute, export_layer, add_label, open_field_manager, layer_statistic, create_buffer, spatial_join, coverage_analysis, gap_analysis, population_coverage, seismic_situation_map, building_risk_analysis
+filter_layer, export_attribute, export_layer, add_label, open_field_manager, layer_statistic, create_buffer, spatial_join, coverage_analysis, gap_analysis, population_coverage, seismic_situation_map, building_risk_analysis, workspace_new, workspace_save, workspace_open, workspace_list
 
 不明な場合は次を返信：
 {"action": "unknown", "message": "指示を認識できませんでした。より明確な説明をお試しください。"}"""
@@ -391,7 +428,7 @@ When the user issues an operation command, reply with a JSON object:
 Supported actions: load_layer, save_project, export_map, zoom_to_layer, zoom_in, zoom_out,
 remove_layer, list_layers, identify_feature, set_crs, show_crs, reproject_layer,
 toggle_editing, select_feature, reset_view, set_layer_style, load_layer_style,
-filter_layer, export_attribute, export_layer, add_label, open_field_manager, layer_statistic, create_buffer, spatial_join, coverage_analysis, gap_analysis, population_coverage, seismic_situation_map, building_risk_analysis
+filter_layer, export_attribute, export_layer, add_label, open_field_manager, layer_statistic, create_buffer, spatial_join, coverage_analysis, gap_analysis, population_coverage, seismic_situation_map, building_risk_analysis, workspace_new, workspace_save, workspace_open, workspace_list
 
 If unrecognized, reply:
 {"action": "unknown", "message": "Unable to recognize the instruction. Please try a clearer description."}"""

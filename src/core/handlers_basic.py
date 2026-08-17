@@ -829,3 +829,57 @@ class HandlersBasicMixin:
 
         return {"success": True,
                 "message": f"缓冲区分析完成，新增图层：{buff_layer.name()}（{len(new_features)} 个要素）"}
+
+    # ── P3-1 新增：工作区 manifest handler ───────────────
+
+    def _handle_workspace_new(self, canvas=None, project=None,
+                              name: str = "", country: str = "jp",
+                              **kwargs) -> Dict[str, Any]:
+        """新建工作区：创建目录 + manifest。"""
+        from core.workspace import WorkspaceManager
+        mgr = WorkspaceManager()
+        if not name:
+            return {"success": False, "message": "请提供工作区名称（参数 name）"}
+        return mgr.create(name=name, country=country or "jp", notes=kwargs.get("notes", ""))
+
+    def _handle_workspace_save(self, canvas=None, project=None,
+                               workspace_id: str = "", **kwargs) -> Dict[str, Any]:
+        """保存工作区：扫描当前 QgsProject 图层写入 manifest。
+
+        未指定 workspace_id 时，默认保存最近更新的工作区。
+        """
+        from core.workspace import WorkspaceManager
+        mgr = WorkspaceManager()
+        if not workspace_id:
+            listing = mgr.list()
+            if not listing["workspaces"]:
+                return {"success": False, "message": "暂无工作区，请先新建工作区（workspace_new）"}
+            workspace_id = listing["workspaces"][0]["id"]
+        return mgr.save(workspace_id, project=project)
+
+    def _handle_workspace_open(self, canvas=None, project=None,
+                               workspace_id: str = "", **kwargs) -> Dict[str, Any]:
+        """打开工作区：读 manifest → 按 source 加载图层回 QgsProject。"""
+        from core.workspace import WorkspaceManager
+        mgr = WorkspaceManager()
+        if not workspace_id:
+            return {"success": False, "message": "请指定工作区 id（参数 workspace_id）"}
+        result = mgr.open(workspace_id, project=project)
+        if canvas and result.get("success") and result.get("loaded"):
+            try:
+                canvas.zoomToFullExtent()
+                canvas.refresh()
+            except Exception:
+                pass
+        return result
+
+    def _handle_workspace_list(self, canvas=None, project=None, **kwargs) -> Dict[str, Any]:
+        """列出全部工作区。"""
+        from core.workspace import WorkspaceManager
+        mgr = WorkspaceManager()
+        result = mgr.list()
+        if result["workspaces"]:
+            lines = [f"  - [{w['id']}] {w['name']}（{w.get('country', '')}）更新于 {w.get('updated_at', '')}"
+                     for w in result["workspaces"]]
+            result["message"] = result["message"] + "\n" + "\n".join(lines)
+        return result
