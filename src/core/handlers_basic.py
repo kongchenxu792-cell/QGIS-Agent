@@ -26,9 +26,19 @@ class HandlersBasicMixin:
 
     @staticmethod
     def _find_layer(project, layer_name: str):
-        """按名称模糊匹配图层。"""
+        """按名称匹配图层：精确匹配优先，模糊匹配兜底。
+
+        模糊匹配若命中派生图层（如源图层名是"避难所"，派生图层叫
+        "避难所_buffer_500.0m"），会把 Polygon 误判为源图层，导致
+        source_is_point 等守卫误报。因此先做大小写不敏感的精确匹配。
+        """
         from qgis.core import QgsProject
         proj = project or QgsProject.instance()
+        # 精确匹配优先（大小写不敏感）
+        for _lid, layer in proj.mapLayers().items():
+            if layer.name().lower() == layer_name.lower():
+                return layer
+        # 模糊匹配兜底
         for _lid, layer in proj.mapLayers().items():
             if layer_name.lower() in layer.name().lower():
                 return layer
