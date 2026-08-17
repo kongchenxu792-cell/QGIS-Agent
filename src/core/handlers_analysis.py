@@ -48,6 +48,15 @@ class HandlersAnalysisMixin:
         import processing
         from qgis.core import QgsVectorLayer
 
+        # P2-4 运行前澄清：图层角色多候选歧义 → 交互点选（不执行、不记录 run）
+        clar = self._clarify_layer_roles(project, "spatial_join", {
+            "target_layer": target_layer, "join_layer": join_layer,
+            "predicate": predicate, "join_fields": join_fields,
+            "summary_mode": summary_mode,
+        })
+        if clar:
+            return clar
+
         if not target_layer or not join_layer:
             return {"success": False, "message": "spatial_join 需要 target_layer 和 join_layer 两个参数"}
 
@@ -222,6 +231,14 @@ class HandlersAnalysisMixin:
 
         路由到 PipelineExecutor，由 coverage_analysis.json 模板驱动 8 步全链路。
         """
+        # P2-4 运行前澄清：图层角色多候选歧义 → 交互点选（不执行、不记录 run）
+        clar = self._clarify_layer_roles(project, "coverage_analysis", {
+            "source_layer": source_layer, "boundary_layer": boundary_layer,
+            "radius_m": radius_m, "selected_only": selected_only,
+        })
+        if clar:
+            return clar
+
         if not source_layer or not boundary_layer:
             return {"success": False,
                     "message": "coverage_analysis 需要 source_layer 和 boundary_layer 两个参数"}
@@ -256,6 +273,16 @@ class HandlersAnalysisMixin:
 
         路由到 PipelineExecutor，由 population_coverage.json 模板驱动 9 步全链路。
         """
+        # P2-4 运行前澄清：图层角色多候选歧义 → 交互点选（不执行、不记录 run）。
+        # population_layer 单候选歧义不触发（由既有自动兜底接管），多候选才澄清。
+        clar = self._clarify_layer_roles(project, "population_coverage", {
+            "source_layer": source_layer, "boundary_layer": boundary_layer,
+            "population_layer": population_layer, "population_field": population_field,
+            "radius_m": radius_m, "selected_only": selected_only,
+        })
+        if clar:
+            return clar
+
         auto_name = ""
         if not source_layer or not boundary_layer:
             return {"success": False,
@@ -305,28 +332,55 @@ class HandlersAnalysisMixin:
                 result["message"] = f"{note}；{result['message']}"
         return result
 
+    def _clarify_layer_roles(self, project, action: str, params: Dict[str, Any]) -> Dict[str, Any] | None:
+        """P2-4 运行前澄清：按参数表顺序检查图层角色参数，返回第一个歧义参数的澄清请求。
+
+        触发规则（统一，两条）：
+        - R1（参数为空）：该角色参数为空时，role_candidates ≥2 → 澄清。
+          population_layer 单候选维持既有自动兜底（_auto_select_polygon_layer 接管）；
+          其他角色单候选维持既有报错（不自动选）；候选 ==0 维持既有报错。
+        - R2（参数非空）：find_layer_candidates 无精确匹配且模糊匹配 ≥2 → 澄清；
+          ==0 维持既有「未找到图层」报错；恰 1 个维持现状。
+
+        一次只返回第一个歧义参数（避免多弹窗叠加；用户点选后重跑若还有下一个
+        歧义会自然再弹，属正常）。澄清请求携带完整 params（LLM 原始参数 + 已探测
+        字段），供审计与重跑回填。
+        """
+        from core.clarification import build_clarification, find_layer_candidates, role_candidates
+
+        # 按参数表顺序（与 handler 签名顺序一致）：source → boundary → population →
+        # intensity → target → join；仅检查存在性（不在 params 中的角色跳过）。
+        role_param_keys = [
+            "source_layer", "boundary_layer", "population_layer",
+            "intensity_layer", "target_layer", "join_layer",
+        ]
+        for param_key in role_param_keys:
+            if param_key not in params:
+                continue
+            val = params.get(param_key, "")
+            if not val:
+                # R1：参数为空 → 多候选澄清；单候选/0 候选维持既有行为
+                cands = role_candidates(project, param_key)
+                if len(cands) >= 2:
+                    return build_clarification(action, param_key, cands, params)
+                continue
+            # R2：参数非空 → 无精确匹配且模糊匹配 ≥2 才澄清
+            cands = find_layer_candidates(project, val)
+            if len(cands) >= 2 and not any(str(c).lower() == str(val).lower() for c in cands):
+                return build_clarification(action, param_key, cands, params)
+        return None
+
     def _auto_select_polygon_layer(self, project) -> str:
         """杂项修复①：查找当前项目中唯一的矢量面图层候选。
 
         仅当候选矢量面图层恰好为 1 个时返回其名称；0 个或多个（歧义）返回空串，
         由调用方维持现状（报缺参数/走澄清），不擅自选择。
+        P2-4：候选枚举复用 role_candidates(project, "population_layer")（几何判定一致）。
         """
-        if project is None:
-            return ""
-        try:
-            from qgis.core import QgsMapLayer, QgsWkbTypes
-        except ImportError:
-            return ""
-        polygon_layers = []
-        for layer in project.mapLayers().values():
-            try:
-                if layer.type() == QgsMapLayer.VectorLayer and \
-                        layer.geometryType() == QgsWkbTypes.PolygonGeometry:
-                    polygon_layers.append(layer)
-            except Exception:
-                continue
-        if len(polygon_layers) == 1:
-            return polygon_layers[0].name()
+        from core.clarification import role_candidates
+        cands = role_candidates(project, "population_layer")
+        if len(cands) == 1:
+            return cands[0]
         return ""
 
     def _handle_building_risk_analysis(self, canvas=None, project=None,
@@ -341,6 +395,17 @@ class HandlersAnalysisMixin:
         路由到 PipelineExecutor，由 building_risk.json 模板驱动 4 步全链路：
         震度裁剪 → 震度×人口交集 → 风险统计 → 输出图层。
         """
+        # P2-4 运行前澄清：图层角色多候选歧义 → 交互点选（不执行、不记录 run）
+        clar = self._clarify_layer_roles(project, "building_risk_analysis", {
+            "intensity_layer": intensity_layer,
+            "population_layer": population_layer,
+            "population_field": population_field,
+            "intensity_field": intensity_field,
+            "boundary_layer": boundary_layer,
+        })
+        if clar:
+            return clar
+
         if not intensity_layer:
             return {"success": False, "message": "building_risk_analysis 需要 intensity_layer 参数"}
         if not population_layer:
@@ -411,6 +476,14 @@ class HandlersAnalysisMixin:
 
         路由到 PipelineExecutor，由 gap_analysis.json 模板驱动 9 步全链路。
         """
+        # P2-4 运行前澄清：图层角色多候选歧义 → 交互点选（不执行、不记录 run）
+        clar = self._clarify_layer_roles(project, "gap_analysis", {
+            "source_layer": source_layer, "boundary_layer": boundary_layer,
+            "radius_m": radius_m, "selected_only": selected_only,
+        })
+        if clar:
+            return clar
+
         if not source_layer or not boundary_layer:
             return {"success": False,
                     "message": "gap_analysis 需要 source_layer 和 boundary_layer 两个参数"}

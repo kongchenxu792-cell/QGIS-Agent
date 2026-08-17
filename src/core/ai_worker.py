@@ -471,7 +471,8 @@ class AIProcessingWorker(QThread):
                  project_manager=None, active_layer_name: str = "",
                  viewport_snapshots: Optional[List[Dict[str, Any]]] = None,
                  canvas=None,
-                 mapper: Optional[InstructionMapper] = None) -> None:
+                 mapper: Optional[InstructionMapper] = None,
+                 params_override: Optional[Dict[str, Any]] = None) -> None:
         super().__init__()
         self.user_text = user_text
         self.layer_metadata = layer_metadata
@@ -481,6 +482,7 @@ class AIProcessingWorker(QThread):
         self.viewport_snapshots = viewport_snapshots  # Phase 2+3: 多模态视口截图
         self.canvas = canvas
         self.mapper = mapper  # Phase 5 Block 1: 在线/离线统一匹配执行
+        self.params_override = params_override  # P2-4: 澄清重跑的图层角色覆盖值
 
     def run(self) -> None:
         try:
@@ -630,10 +632,14 @@ class AIProcessingWorker(QThread):
             canvas=canvas,
             project=project,
             user_text=self.user_text,
+            params_override=self.params_override,
         )
 
-        # 混动模式：本地无法完成（unknown / success=False）→ 升级云端
-        if is_hybrid_mode() and not result.get("success", False):
+        # 混动模式：本地无法完成（unknown / 失败）→ 升级云端。
+        # P2-4：澄清结果（多候选交互点选）不触发云端升级——澄清由壳侧确定性完成，
+        # LLM 零参与提问；升级云端也无法替代用户点选。
+        from core.clarification import is_clarification_result
+        if is_hybrid_mode() and not is_clarification_result(result):
             _log.info(
                 "混动模式：本地无法完成（action=%s），升级云端",
                 result.get("action"),
@@ -648,6 +654,7 @@ class AIProcessingWorker(QThread):
                 "status": result.get("status", "ok" if result.get("success", False) else "failed"),
                 "message": result.get("message", ""),
                 "action": result.get("action", ""),
+                "clarification": result.get("clarification"),
             }),
             "reasoning": f"离线模式：{result.get('action', '问答')}",
         }], ensure_ascii=False)
@@ -738,6 +745,7 @@ class AIProcessingWorker(QThread):
             canvas=canvas,
             project=project,
             user_text=self.user_text,
+            params_override=self.params_override,
         )
 
         # 返回统一格式的 _offline_response pipeline
@@ -748,6 +756,7 @@ class AIProcessingWorker(QThread):
                 "status": result.get("status", "ok" if result.get("success", False) else "failed"),
                 "message": result.get("message", ""),
                 "action": result.get("action", ""),
+                "clarification": result.get("clarification"),
                 "output_file": result.get("output_file", ""),
                 "output_layer_name": result.get("output_layer", None).name() if result.get("output_layer") else "",
             }),

@@ -229,5 +229,8 @@
   "risk_body_online": "指示とコンテキストはすべてクラウドの大規模モデルに送信されます。機密データは処理しないでください。",
   "risk_tip_online": "推奨データ：公開データ・匿名化済みデータ・デモデータのみ。",
   "risk_continue": "切り替える",
-  "risk_cancel": "キャンセル"
+  "risk_cancel": "キャンセル",
+  "clarif_title": "確認が必要です",
+  "clarif_question": "「{role}」役割に複数の候補レイヤがあります。選択してください：",
+  "clarif_cancel": "キャンセル"
 }

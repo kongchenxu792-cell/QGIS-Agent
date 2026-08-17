@@ -1,7 +1,8 @@
 """test_misc_fixes — 杂项修复测试。
 
 覆盖：
-- 人口图层兜底（单候选自动兜底 + info 消息、多候选歧义维持报错、无候选报错、非空参数不受影响）
+- 人口图层兜底（单候选自动兜底 + info 消息、多候选歧义返回澄清请求（P2-4）、
+  无候选报错、非空参数不受影响）
 - bootstrap_qgis 便携引擎失败回退系统 QGIS 的显式警告 message 断言
 """
 
@@ -127,8 +128,8 @@ class TestPopulationCoverageFallback(unittest.TestCase):
         kwargs = mock_execute.call_args[1]
         self.assertEqual(kwargs["population_layer_name"], "大阪行政区")
 
-    def test_multi_candidate_still_errors(self):
-        """多面候选歧义 → 维持现状报缺参数。"""
+    def test_multi_candidate_requests_clarification(self):
+        """P2-4：多面候选歧义且无 population_layer → 返回澄清请求结构（不执行）。"""
         mapper = self._mapper()
         proj = self._proj([self.poly, self.poly2])
         result = mapper._handle_population_coverage(
@@ -136,7 +137,16 @@ class TestPopulationCoverageFallback(unittest.TestCase):
             population_layer="", population_field="population",
         )
         self.assertFalse(result["success"])
-        self.assertIn("population_layer", result["message"])
+        self.assertEqual(result["status"], "clarification")
+        self.assertEqual(result["clarification"]["param_key"], "population_layer")
+        self.assertEqual(
+            sorted(result["clarification"]["candidates"]),
+            ["东京行政区", "大阪行政区"],
+        )
+        self.assertIn("东京行政区", result["message"])
+        self.assertIn("大阪行政区", result["message"])
+        # 澄清轮不执行、不记录 run（P3-2 衔接）
+        self.assertNotIn("output_layer", result)
 
     def test_no_polygon_candidate_still_errors(self):
         mapper = self._mapper()

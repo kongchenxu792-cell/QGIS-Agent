@@ -229,5 +229,8 @@
   "risk_body_online": "Your instruction and context will all be sent to the cloud LLM. Do not process any sensitive data.",
   "risk_tip_online": "Recommended data: public data, anonymized data, or demo data only.",
   "risk_continue": "Switch Anyway",
-  "risk_cancel": "Cancel"
+  "risk_cancel": "Cancel",
+  "clarif_title": "Clarification Required",
+  "clarif_question": "Multiple candidate layers exist for the \"{role}\" role, please choose:",
+  "clarif_cancel": "Cancel"
 }

@@ -184,6 +184,7 @@ class InstructionMapper(HandlersBasicMixin, HandlersAnalysisMixin, HandlersSeism
         canvas: Any = None,
         project: Any = None,
         user_text: str = "",
+        params_override: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """解析 LLM 响应并执行匹配的指令。
 
@@ -197,6 +198,9 @@ class InstructionMapper(HandlersBasicMixin, HandlersAnalysisMixin, HandlersSeism
             当前 QGIS 项目。
         user_text : str
             用户原始输入文本，用于关键词兜底匹配和图层名自动检测。
+        params_override : dict or None
+            P2-4 澄清重跑的图层角色覆盖值（用户点选结果）。在图层名校验
+            （_correct_layer_params）之前合并，覆盖同名键；默认 None 既有调用零影响。
 
         Returns
         -------
@@ -250,6 +254,20 @@ class InstructionMapper(HandlersBasicMixin, HandlersAnalysisMixin, HandlersSeism
 
         # 3.5 图层名校验与自动修正：LLM 可能幻想不存在的图层名
         if project:
+            # P2-4：params_override 合并时机——在 _correct_layer_params 之前合并，
+            # 使参数校验、字段自动探测（_auto_detect_field_params 需要 population_layer
+            # 已定才能探测 population_field）基于用户点选的最终图层执行。
+            # override 值被 correction 清空（图层在对话框期间被删）→ 自然回到澄清/报错路径。
+            if params_override:
+                merged = dict(params)
+                for k, v in params_override.items():
+                    if v is not None:
+                        merged[k] = v
+                _log.info(
+                    "params_override 合并: action=%s keys=%s",
+                    action, sorted(params_override.keys()),
+                )
+                params = merged
             params = _correct_layer_params(project, params, user_text)
 
         # 3.6 参数键别名：LLM 可能输出 layer 而非 layer_name（export_attribute/zoom_to_layer 等）

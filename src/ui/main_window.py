@@ -2168,10 +2168,6 @@ class MainWindow(QMainWindow):
     def _handle_run_clicked(self) -> None:
         """将当前 AI 指令发送至后台工作线程。"""
 
-        # 每次运行前清空上一轮的代码缓存，确保使用最新 Prompt 重新请求 API
-        self.last_ai_code = ""
-        self.skip_preview = False
-
         user_text = self.ai_prompt_input.toPlainText().strip()
         if not user_text:
             QMessageBox.warning(
@@ -2196,6 +2192,19 @@ class MainWindow(QMainWindow):
                     QMessageBox.information(self, "提示", result.get("message", "无法打开属性表"))
                 return
 
+        self._launch_ai_worker(user_text)
+
+    def _launch_ai_worker(self, user_text: str, params_override: Optional[Dict[str, Any]] = None) -> None:
+        """创建并启动 AI 后台工作线程。
+
+        抽自 _handle_run_clicked，供普通运行与 P2-4 澄清重跑复用。
+        - 每次运行前清空上一轮的代码缓存，确保使用最新 Prompt 重新请求 API；
+        - 澄清重跑 viewport_snapshots 传 None（不重复截图，其余状态同普通运行）；
+        - 将 params_override（用户点选结果）透传给 Worker，经 match_and_execute 合并。
+        """
+        self.last_ai_code = ""
+        self.skip_preview = False
+
         layer_metadata = self._collect_layer_metadata()
         if not layer_metadata:
             QMessageBox.warning(
@@ -2213,19 +2222,75 @@ class MainWindow(QMainWindow):
         # 使 Worker 能在 API 调用前执行实时 QGIS 状态同步（Perception-Action Loop）
         active_layer = self._get_active_layer()
         active_layer_name = active_layer.name() if active_layer else ""
+        viewport_snapshots = None if params_override else self._pending_multimodal_data
+        if not params_override:
+            self._pending_multimodal_data = None
         self.ai_worker = AIProcessingWorker(
             user_text, layer_metadata,
             project_manager=self.project_manager,
             active_layer_name=active_layer_name,
-            viewport_snapshots=self._pending_multimodal_data,
+            viewport_snapshots=viewport_snapshots,
             canvas=getattr(self, 'map_canvas', None),
             mapper=self._mapper,
+            params_override=params_override,
         )
-        self._pending_multimodal_data = None
         self.ai_worker.pipeline_ready.connect(self._execute_pipeline)
         self.ai_worker.failed.connect(self._handle_ai_error)
         self.ai_worker.finished.connect(self._reset_ai_worker_state)
         self.ai_worker.start()
+
+    def _show_clarification_dialog(self, clarification: Dict[str, Any], user_text: str) -> None:
+        """P2-4：图层角色多候选交互点选澄清对话框（主线程，信号回调即主线程）。
+
+        - 标题 tr("clarif_title")，正文 tr("clarif_question", role=角色显示名)，
+          每个候选一个按钮，一个「取消」按钮。
+        - 点候选 → 关对话框 → 以用户所选为 params_override 重跑 AI 工作线程
+          （对话框模态，重跑天然串行——用户同一时间只能做一件事）。
+        - 取消/关闭 → 确定性报错 + 状态栏提示，不启动新 worker，主线不卡。
+        """
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout
+        from core.clarification import ROLE_LABELS, format_cancel_message
+
+        param_key = clarification.get("param_key", "")
+        candidates = clarification.get("candidates", [])
+        lm = lang_manager()
+        role_label = ROLE_LABELS.get(param_key, {}).get(
+            lm.current_lang, param_key,
+        )
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(lm.tr("clarif_title"))
+        layout = QVBoxLayout(dlg)
+        layout.addWidget(QLabel(lm.tr("clarif_question", role=role_label)))
+        chosen: Dict[str, Any] = {"value": None}
+
+        def _on_pick(cand: str) -> None:
+            chosen["value"] = cand
+            dlg.accept()
+
+        for cand in candidates:
+            btn = QPushButton(str(cand), dlg)
+            btn.clicked.connect(lambda checked=False, c=cand: _on_pick(str(c)))
+            layout.addWidget(btn)
+        cancel_btn = QPushButton(lm.tr("clarif_cancel"), dlg)
+        cancel_btn.clicked.connect(dlg.reject)
+        layout.addWidget(cancel_btn)
+
+        dlg.exec_()
+
+        if chosen["value"] is not None:
+            # 点选：以用户所选作为 params_override 重跑；viewport_snapshots 传 None
+            self._launch_ai_worker(
+                user_text,
+                params_override={param_key: chosen["value"]},
+            )
+            return
+
+        # 取消/关闭：确定性降级报错（列出候选清单），不启动新 worker
+        cancel_msg = format_cancel_message(clarification)
+        self.ai_response_display.append("❌ " + cancel_msg)
+        QMessageBox.warning(self, lm.tr("clarif_title"), cancel_msg)
+        self.statusBar().showMessage("澄清已取消，未执行", 5000)
 
     def _on_canvas_screenshot_clicked(self) -> None:
         """Phase 4：画布截图分析按钮回调。
@@ -2641,6 +2706,12 @@ class MainWindow(QMainWindow):
                     offline_status = "failed"
                     output_file = ""
                 self.ai_response_display.setPlainText(offline_msg)
+                # P2-4: 澄清请求（图层角色多候选交互点选）——在 status 判断之前拦截。
+                # 结构不完整时 is_clarification_result 返回 False → 按普通失败分支处理。
+                from core.clarification import is_clarification_result
+                if is_clarification_result(offline_args):
+                    self._show_clarification_dialog(offline_args["clarification"], user_text)
+                    return
                 # P2-3: 离线分支同样按 status 区分（degraded → ⚠️ + warning 弹窗）
                 if offline_status == "degraded":
                     from core.result_contract import derive_status_message

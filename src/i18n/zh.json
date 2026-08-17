@@ -229,5 +229,8 @@
   "risk_body_online": "指令与上下文将全部上传云端大模型。请勿处理任何敏感数据。",
   "risk_tip_online": "数据类型建议：仅适合公开数据、已脱敏数据、演示数据。",
   "risk_continue": "继续切换",
-  "risk_cancel": "取消"
+  "risk_cancel": "取消",
+  "clarif_title": "需要澄清",
+  "clarif_question": "「{role}」角色存在多个候选图层，请选择：",
+  "clarif_cancel": "取消"
 }
