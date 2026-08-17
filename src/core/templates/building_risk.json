@@ -4,6 +4,7 @@
   "ja_triggers": ["建物倒壊リスク", "震度人口リスク", "被災人口推定", "建物リスク分析"],
   "en_triggers": ["building collapse risk", "seismic population risk", "exposed population estimation", "building risk analysis"],
   "output_base": "user_data/exports/shapefiles/",
+  "output_check": {"empty": "degraded"},
   "params": [
     {
       "name": "intensity_layer",
@@ -64,8 +65,7 @@
         ]
       },
       "log": "[BUILDING_RISK] 震度图层裁剪完成: fc={fc}",
-      "comment": "可选步骤：用边界裁剪震度图层到想定区划内",
-      "skip_if": "!boundary_layer"
+      "comment": "可选步骤：用边界裁剪震度图层到想定区划内"
     },
     {
       "id": "pop_intersect",

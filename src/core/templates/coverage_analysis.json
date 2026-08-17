@@ -4,6 +4,7 @@
   "ja_triggers": ["カバー率", "カバレッジ", "バッファカバレッジ", "バッファカバー率"],
   "en_triggers": ["coverage", "buffer coverage", "coverage analysis", "shelter coverage"],
   "output_base": "user_data/exports/shapefiles/",
+  "output_check": {"empty": "degraded"},
   "params": [
     {
       "name": "source_layer",

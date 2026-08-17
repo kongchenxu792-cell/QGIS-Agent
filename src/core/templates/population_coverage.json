@@ -4,6 +4,7 @@
   "ja_triggers": ["人口カバー率", "ポピュレーションカバレッジ", "人口カバー", "人口カバー分析"],
   "en_triggers": ["population coverage", "population coverage rate", "population coverage analysis"],
   "output_base": "user_data/exports/shapefiles/",
+  "output_check": {"empty": "degraded"},
   "params": [
     {
       "name": "source_layer",

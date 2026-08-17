@@ -74,6 +74,8 @@ class TemplateDef:
     guards: Optional[GuardCheck] = None
     steps: List[StepDef] = field(default_factory=list)
     output_base: str = "user_data/exports/shapefiles/"
+    # P2-2 输出步结构期望声明：{"empty": "ok"|"degraded"} —— 空语义逐模板声明，不一刀切
+    output_check: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -388,6 +390,30 @@ class PipelineExecutor:
                 "stats": stats_snapshot,
             }
 
+        # ── P2-2 出口体检：输出步结构检查（复用 _VALIDATE_VAR_MAP 表达式机制）──
+        # 只查结构（fc>0、几何非空）；严禁把业务值当失败（0% 覆盖率合法、gap 全覆盖空图层合法）。
+        output_check = self.template.output_check if self.template else {}
+        empty_semantics = (output_check or {}).get("empty", "degraded")
+        if empty_semantics not in ("ok", "degraded"):
+            _log.warning("[execute] 模板 '%s' output_check.empty=%r 非法，使用缺省 'degraded'",
+                         self.template.template_id if self.template else "?",
+                         empty_semantics)
+            empty_semantics = "degraded"
+
+        structure_issues = []
+        if not _parse_and_eval("fc > 0", output_result):
+            structure_issues.append(f"fc={output_result.feature_count}（fc>0 不满足）")
+        if not _parse_and_eval("not is_empty", output_result):
+            structure_issues.append("shapely_geom 缺失或为空")
+
+        status = "ok"
+        if structure_issues:
+            _log.warning("[execute] 输出步骤 '%s' 结构检查不过: %s；output_check.empty=%s",
+                         output_result.step_id, "; ".join(structure_issues), empty_semantics)
+            if empty_semantics == "degraded":
+                status = "degraded"
+        # 其它结构期望（字段存在 / CRS 一致 / 几何有效）后续切片按需扩展
+
         # 构建详细输出信息
         output_name = ""
         feature_count = 0
@@ -456,10 +482,15 @@ class PipelineExecutor:
                 detail_parts.append(f"覆盖率 {coverage_pct:.1f}%")
         message_parts.append(f"（{'，'.join(detail_parts)}）")
 
+        message = "".join(message_parts)
+        if status == "degraded":
+            # P2-2：输出空存疑——警告但不判死（业务值仍以 stats 为准）
+            message += "⚠️ 结果为空，请检查数据/参数"
+
         return {
             "success": True,
-            "status": "ok",  # P2-1 显式终态状态机
-            "message": "".join(message_parts),
+            "status": status,  # P2-1 状态机 + P2-2 出口体检: ok | degraded
+            "message": message,
             "elapsed": time.time() - t0,
             "step_count": len(self.step_results),
             "output_file": self._ensure_output_file(output_result),
@@ -586,6 +617,7 @@ class PipelineExecutor:
             guards=guards,
             steps=steps,
             output_base=raw.get("output_base", "user_data/exports/shapefiles/"),
+            output_check=raw.get("output_check") or {},
         )
 
     # ── Guards ───────────────────────────────────────────────────
@@ -620,6 +652,7 @@ class PipelineExecutor:
     def _execute_step(self, step: StepDef, input_data: Any, boundary_data: Any) -> StepResult:
         """按 engine_chain 执行，成功且 validate 通过即止。"""
         last_error = None
+        last_result = None  # P2-2：记录最后运行成功但 validate 未过的引擎结果（仅输出步）
         eng_start = time.time()
 
         for eng in step.engine_chain:
@@ -646,6 +679,11 @@ class PipelineExecutor:
                 if not self._validate(eng.validate, result):
                     _log.warning("[step %s] engine=%s VALIDATE FAILED: %s", step.id, eng.name, eng.validate)
                     last_error = f"Validate failed [{eng.name}]: {eng.validate}"
+                    # P2-2：输出步 validate 失败不判死——空图层语义由模板 output_check
+                    # 逐模板声明（ok 合法 / degraded 存疑），保留引擎结果交由 execute()
+                    # 终态结构检查裁决；中间步骤仍走 P2-1 fail-fast（error 语义）
+                    if step.id in ("output_layer", "output"):
+                        last_result = result
                     continue
 
                 _log.info("[step %s] engine=%s OK", step.id, eng.name)
@@ -658,6 +696,16 @@ class PipelineExecutor:
                 last_error = f"{eng.name} crashed: {e}"
                 continue
 
+        # 全部引擎耗尽
+        if (step.id in ("output_layer", "output")
+                and last_result is not None
+                and last_error is not None
+                and last_error.startswith("Validate failed")):
+            # P2-2：输出步引擎均运行成功但 validate 未过（结构不健康）→ 不判死，
+            # 保留最后一个引擎结果交由 execute() 终态结构检查（ok / degraded）
+            _log.warning("[step %s] 输出步引擎全部 validate 未过: %s；交由终态结构检查裁决",
+                         step.id, last_error)
+            return last_result
         # P2-1：全部引擎耗尽 → failed（显式状态 + 错误日志）
         _log.error("[step %s] FAILED (all engines exhausted): %s", step.id, last_error)
         return StepResult(step_id=step.id, error=last_error, status="failed")

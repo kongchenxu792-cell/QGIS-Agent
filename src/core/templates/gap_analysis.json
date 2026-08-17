@@ -4,6 +4,7 @@
   "ja_triggers": ["サービス盲域", "カバーされていないエリア", "空白地域", "未カバー", "サービスギャップ"],
   "en_triggers": ["gap", "gap analysis", "uncovered", "coverage gap", "service gap"],
   "output_base": "user_data/exports/shapefiles/",
+  "output_check": {"empty": "ok"},
   "params": [
     {
       "name": "source_layer",
