@@ -90,7 +90,6 @@ from core.ai_worker import (
 from core.config_manager import ConfigManager
 from core.instruction_mapper import InstructionMapper
 from core.layer_loader import create_layer_from_path, is_supported_path, is_table_path, load_layers_from_paths
-from core.multimodal.canvas_capture import CanvasCapture
 from core.output_persistence import generate_output_path, generate_geojson_output_path
 from core.project_manager import ProjectManager
 from core.qgis_env import QgisBootstrapResult
@@ -433,9 +432,11 @@ class MainWindow(QMainWindow):
         self._lm = lang_manager()
 
         self.ai_prompt_input = QTextEdit(self)
+        self.ai_prompt_input.setAccessibleName("ai_prompt_input")
         self.run_button = QPushButton(self._lm.tr("btn_run_ai"), self)
-        self.screenshot_button = QPushButton(self._lm.tr("btn_screenshot"), self)
+        self.run_button.setAccessibleName("run_button")
         self.ai_response_display = QTextEdit(self)
+        self.ai_response_display.setAccessibleName("ai_response_display")
         self.ai_response_display.setReadOnly(True)
 
         # 项目管理器
@@ -468,7 +469,6 @@ class MainWindow(QMainWindow):
         """构建完整的窗口布局。"""
 
         self._build_menubar()
-        self._build_toolbar()
 
         central_widget = QWidget(self)
         root_layout = QVBoxLayout(central_widget)
@@ -669,9 +669,6 @@ class MainWindow(QMainWindow):
         # 菜单栏
         self._refresh_menu_labels()
 
-        # 工具栏
-        self._refresh_toolbar_labels()
-
         # 侧边栏
         self._refresh_sidebar_labels()
 
@@ -788,34 +785,6 @@ class MainWindow(QMainWindow):
             return lang_manager().tr(key)
         return text
 
-    def _refresh_toolbar_labels(self) -> None:
-        """刷新工具栏文本。"""
-        for tb in self.findChildren(QToolBar):
-            tb.setWindowTitle(lang_manager().tr("toolbar_title"))
-            for action in tb.actions():
-                action_name = action.text()
-                bar_map = {
-                    "平移": "tool_pan", "移动": "tool_pan", "Pan": "tool_pan",
-                    "放大": "tool_zoom_in", "拡大": "tool_zoom_in", "Zoom In": "tool_zoom_in",
-                    "缩小": "tool_zoom_out", "縮小": "tool_zoom_out", "Zoom Out": "tool_zoom_out",
-                    "选择": "tool_select", "選択": "tool_select", "Select": "tool_select",
-                    "编辑": "tool_edit", "編集": "tool_edit", "Edit": "tool_edit",
-                }
-                key = bar_map.get(action_name)
-                if key:
-                    action.setText(lang_manager().tr(key))
-                # tooltip
-                tip_map = {
-                    "平移": "tool_pan_tip", "移动": "tool_pan_tip", "Pan": "tool_pan_tip",
-                    "放大": "tool_zoom_in_tip", "拡大": "tool_zoom_in_tip", "Zoom In": "tool_zoom_in_tip",
-                    "缩小": "tool_zoom_out_tip", "縮小": "tool_zoom_out_tip", "Zoom Out": "tool_zoom_out_tip",
-                    "选择": "tool_select_tip", "選択": "tool_select_tip", "Select": "tool_select_tip",
-                    "编辑": "tool_edit_tip", "編集": "tool_edit_tip", "Edit": "tool_edit_tip",
-                }
-                tip_key = tip_map.get(action_name)
-                if tip_key:
-                    action.setToolTip(lang_manager().tr(tip_key))
-
     def _refresh_sidebar_labels(self) -> None:
         """刷新侧边栏文本。"""
         # 通过遍历 QFrame 的子控件找到标签和按钮
@@ -843,8 +812,6 @@ class MainWindow(QMainWindow):
         lm = lang_manager()
         self.run_button.setText(lm.tr("btn_run_ai"))
         self.run_button.setToolTip(lm.tr("btn_run_tip"))
-        self.screenshot_button.setText(lm.tr("btn_screenshot"))
-        self.screenshot_button.setToolTip(lm.tr("btn_screenshot_tip"))
 
         if self.offline_mode:
             self.ai_prompt_input.setPlaceholderText(lm.tr("ai_placeholder_offline"))
@@ -879,7 +846,6 @@ class MainWindow(QMainWindow):
         self.ai_prompt_input.setPlaceholderText(self._lm.tr("ai_placeholder_offline_local"))
         self.run_button.setEnabled(True)
         self.run_button.setToolTip(self._lm.tr("btn_run_tip"))
-        self.screenshot_button.setEnabled(False)
 
         if self.offline_mode_label:
             self.offline_mode_label.setText(" " + self._lm.tr("status_offline"))
@@ -897,7 +863,6 @@ class MainWindow(QMainWindow):
         self.ai_prompt_input.setPlaceholderText(self._lm.tr("ai_placeholder_online"))
         self.run_button.setEnabled(True)
         self.run_button.setToolTip(self._lm.tr("btn_run_tip"))
-        self.screenshot_button.setEnabled(self.multimodal_enabled)
 
         if self.offline_mode_label:
             self.offline_mode_label.setText(" " + self._lm.tr("status_online"))
@@ -915,7 +880,6 @@ class MainWindow(QMainWindow):
         self.ai_prompt_input.setPlaceholderText(self._lm.tr("ai_placeholder_offline_local"))
         self.run_button.setEnabled(True)
         self.run_button.setToolTip(self._lm.tr("btn_run_tip"))
-        self.screenshot_button.setEnabled(False)
 
         if self.offline_mode_label:
             self.offline_mode_label.setText(" " + self._lm.tr("status_hybrid"))
@@ -1317,7 +1281,6 @@ class MainWindow(QMainWindow):
     def _toggle_multimodal(self, checked: bool) -> None:
         """Phase 4：切换多模态画布截图分析开关。"""
         self.multimodal_enabled = checked
-        self.screenshot_button.setEnabled(checked)
         self.statusBar().showMessage(
             "画布截图分析已启用" if checked else "画布截图分析已关闭，回滚至纯文本管线",
             3000,
@@ -1342,7 +1305,6 @@ class MainWindow(QMainWindow):
                 self._code_worker.wait(2000)
             self._code_worker = None
         self.run_button.setEnabled(True)
-        self.screenshot_button.setEnabled(self.multimodal_enabled)
         self.statusBar().showMessage("AI 上下文已重置，代码缓存已清空。", 3000)
         _log.info("AI 上下文已手动重置")
 
@@ -1512,40 +1474,6 @@ class MainWindow(QMainWindow):
 
         dialog.exec_()
 
-    def _build_toolbar(self) -> None:
-        """构建顶部地图导航工具栏。"""
-
-        toolbar = QToolBar(self._lm.tr("toolbar_title"), self)
-        toolbar.setMovable(False)
-        toolbar.setToolButtonStyle(Qt.ToolButtonTextOnly)
-
-        pan_action = QAction(self._lm.tr("tool_pan"), self)
-        pan_action.setToolTip(self._lm.tr("tool_pan_tip"))
-        zoom_in_action = QAction(self._lm.tr("tool_zoom_in"), self)
-        zoom_in_action.setToolTip(self._lm.tr("tool_zoom_in_tip"))
-        zoom_out_action = QAction(self._lm.tr("tool_zoom_out"), self)
-        zoom_out_action.setToolTip(self._lm.tr("tool_zoom_out_tip"))
-
-        pan_action.triggered.connect(self._handle_pan)
-        zoom_in_action.triggered.connect(self._handle_zoom_in)
-        zoom_out_action.triggered.connect(self._handle_zoom_out)
-
-        toolbar.addAction(pan_action)
-        toolbar.addAction(zoom_in_action)
-        toolbar.addAction(zoom_out_action)
-        self.addToolBar(toolbar)
-
-        # P0 新增：要素选择和编辑切换按钮
-        select_action = QAction(self._lm.tr("tool_select"), self)
-        select_action.setToolTip(self._lm.tr("tool_select_tip"))
-        select_action.triggered.connect(self._handle_select_tool)
-        toolbar.addAction(select_action)
-
-        edit_action = QAction(self._lm.tr("tool_edit"), self)
-        edit_action.setToolTip(self._lm.tr("tool_edit_tip"))
-        edit_action.triggered.connect(self._handle_toggle_edit_tool)
-        toolbar.addAction(edit_action)
-
     def _build_sidebar(self) -> QWidget:
         """构建左侧原生 QGIS 图层树面板。"""
 
@@ -1675,12 +1603,6 @@ class MainWindow(QMainWindow):
         self.run_button.clicked.connect(self._handle_run_clicked)
         button_column.addWidget(self.run_button)
 
-        # Phase 4：画布截图分析按钮
-        self.screenshot_button.setToolTip("截取当前画布并基于视觉分析执行指令")
-        self.screenshot_button.clicked.connect(self._on_canvas_screenshot_clicked)
-        self.screenshot_button.setEnabled(self.multimodal_enabled)
-        button_column.addWidget(self.screenshot_button)
-
         input_row.addWidget(self.ai_prompt_input, 1)
         input_row.addLayout(button_column)
 
@@ -1759,69 +1681,6 @@ class MainWindow(QMainWindow):
             }
             """
         )
-
-    def _handle_pan(self) -> None:
-        """激活平移模式。"""
-
-        if self.map_canvas is None or self.pan_tool is None:
-            self._show_qgis_error()
-            return
-
-        self.map_canvas.setMapTool(self.pan_tool)
-        self.statusBar().showMessage("当前工具：平移（按住鼠标左键拖动地图）", 3000)
-
-    def _handle_zoom_in(self) -> None:
-        """激活放大模式。"""
-
-        if self.map_canvas is None or self.zoom_in_tool is None:
-            self._show_qgis_error()
-            return
-
-        self.map_canvas.setMapTool(self.zoom_in_tool)
-        self.statusBar().showMessage("当前工具：放大（拖拽矩形区域）", 3000)
-
-    def _handle_zoom_out(self) -> None:
-        """激活缩小模式。"""
-
-        if self.map_canvas is None or self.zoom_out_tool is None:
-            self._show_qgis_error()
-            return
-
-        self.map_canvas.setMapTool(self.zoom_out_tool)
-        self.statusBar().showMessage("当前工具：缩小（点击或拖拽矩形区域）", 3000)
-
-    # ── P0/P1/P2 新增 handler 方法 ──────────────────────────
-
-    def _handle_select_tool(self) -> None:
-        """工具栏：激活框选要素工具。"""
-        if self.map_canvas is None:
-            self._show_qgis_error()
-            return
-        from qgis.utils import iface
-        if iface is not None:
-            iface.actionSelectRectangle().trigger()
-            self.statusBar().showMessage("框选工具已激活 — 在地图上拖拽矩形选择要素", 3000)
-        else:
-            QMessageBox.information(self, "选择工具", "框选工具已激活，请在地图上拖拽矩形区域选择要素。")
-
-    def _handle_toggle_edit_tool(self) -> None:
-        """工具栏：切换当前活动矢量图层的编辑状态。"""
-        from qgis.core import QgsVectorLayer
-        from core.instruction_mapper import InstructionMapper
-
-        layer = self._get_active_layer()
-        if layer is None:
-            QMessageBox.information(self, "编辑切换", "当前没有活动图层。")
-            return
-        if not isinstance(layer, QgsVectorLayer):
-            QMessageBox.information(self, "编辑切换", "编辑操作仅支持矢量图层。")
-            return
-
-        mapper = InstructionMapper()
-        result = mapper._handle_toggle_editing(layer_name=layer.name(), canvas=self.map_canvas)
-        self.statusBar().showMessage(result.get("message", ""), 5000)
-        if result.get("success") and self.map_canvas:
-            self.map_canvas.refresh()
 
     def _handle_reset_view(self) -> None:
         """视图 → 全图显示。"""
@@ -2215,7 +2074,6 @@ class MainWindow(QMainWindow):
             return
 
         self.run_button.setEnabled(False)
-        self.screenshot_button.setEnabled(False)
         self.statusBar().showMessage("AI 正在思考并计算中，请稍候...")
 
         # Phase 5.1: 传递 ProjectManager 和活动图层名称给 Worker，
@@ -2291,46 +2149,6 @@ class MainWindow(QMainWindow):
         self.ai_response_display.append("❌ " + cancel_msg)
         QMessageBox.warning(self, lm.tr("clarif_title"), cancel_msg)
         self.statusBar().showMessage("澄清已取消，未执行", 5000)
-
-    def _on_canvas_screenshot_clicked(self) -> None:
-        """Phase 4：画布截图分析按钮回调。
-
-        截取当前 QGIS 画布视口，将截图（含空间元数据）与用户 Prompt
-        一并注入 AIWorker，走 Vision API 多模态管线。
-        """
-        user_text = self.ai_prompt_input.toPlainText().strip()
-        if not user_text:
-            QMessageBox.warning(
-                self,
-                "缺少分析指令",
-                "请输入地理空间分析指令后再运行。",
-            )
-            return
-
-        if self.map_canvas is None:
-            QMessageBox.warning(self, "画布不可用", "QGIS 地图画布未初始化。")
-            return
-
-        # 每次运行前清空上一轮的代码缓存
-        self.last_ai_code = ""
-        self.skip_preview = False
-
-        # 捕获画布视口（含 spatial_context 元数据）
-        try:
-            snapshot = CanvasCapture.capture_viewport(self.map_canvas)
-            self._pending_multimodal_data = [snapshot]
-            _log.info(
-                "画布截图成功，CRS=%s，尺寸=%d",
-                snapshot.get("spatial_context", {}).get("crs", "?"),
-                len(snapshot.get("image_base64", "")),
-            )
-        except Exception as e:
-            _log.error("画布截图失败：%s", e)
-            QMessageBox.warning(self, "截图失败", f"无法截取画布：{e}")
-            return
-
-        # 复用已有的纯文本执行管线，注入多模态数据
-        self._handle_run_clicked()
 
     def _show_qgis_error(self) -> None:
         """当 QGIS 不可用时显示中文错误对话框。"""
@@ -2429,7 +2247,6 @@ class MainWindow(QMainWindow):
         active_layer_name = active_layer.name() if active_layer else ""
 
         self.run_button.setEnabled(False)
-        self.screenshot_button.setEnabled(False)
         self.statusBar().showMessage("AI 正在解析表格并建立点数据，请稍候...")
 
         self.ai_worker = AIProcessingWorker(
@@ -3111,14 +2928,12 @@ class MainWindow(QMainWindow):
             error_message,
         )
         self.run_button.setEnabled(True)
-        self.screenshot_button.setEnabled(self.multimodal_enabled)
         self.statusBar().showMessage("AI 请求失败。", 6000)
 
     def _reset_ai_worker_state(self) -> None:
         """AI 请求完成后恢复 UI 状态。"""
 
         self.run_button.setEnabled(True)
-        self.screenshot_button.setEnabled(self.multimodal_enabled)
         self.ai_worker = None
 
     @staticmethod
