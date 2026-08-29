@@ -1,0 +1,29 @@
+========================================
+落地证明包：真实 LLM 指令识别 → 引擎执行
+========================================
+QGIS 引擎初始化完成
+Ollama context 已限制为 8192（显存稳妥）
+[数据] 东京行政区: 1 要素, CRS=EPSG:3857
+[数据] 避难所: 1 要素, CRS=EPSG:3857
+[数据] 人口: 4 要素, CRS=EPSG:3857
+本地模型：qwen3.5-4b
+
+[1/4] 指令：对避难所创建 500 米缓冲区
+        本地模型识别：action=create_buffer, params={"layer_name": "避难所", "distance": 500.0, "selected_only": false}
+        执行结果：成功 (0.0s) — 缓冲区分析完成，新增图层：避难所_buffer_500.0m（1 个要素）
+
+[2/4] 指令：计算避难所的覆盖范围，边界用东京行政区
+        本地模型识别：action=coverage_analysis, params={"source_layer": "避难所", "boundary_layer": "东京行政区", "radius_m": 500.0}
+        执行结果：成功 (0.1s) — 覆盖率分析完成，新增图层：避难所_coverage_500.0m（1 个要素，500.0m 缓冲区，覆盖率 0.8%）
+
+[3/4] 指令：分析避难所500米服务范围的盲区，边界用东京行政区
+        本地模型识别：action=gap_analysis, params={"source_layer": "避难所", "boundary_layer": "东京行政区", "radius_m": 500.0}
+        执行结果：成功 (0.0s) — 盲区分析完成，新增图层：避难所_gap_500.0m（1 个要素，500.0m 缓冲区，盲区率 99.2%，盲区面积 99227458 m²）
+
+[4/4] 指令：计算避难所500米范围内的人口覆盖率，边界用东京行政区，人口字段用population
+        本地模型识别：action=population_coverage, params={"source_layer": "避难所", "boundary_layer": "东京行政区", "population_layer": "人口", "population_field": "population", "radius_m": 500.0}
+        执行结果：成功 (0.1s) — 人口覆盖率分析完成，新增图层：避难所_pop_coverage_500.0m（1 个要素，500.0m 缓冲区，面积覆盖率 0.8%，人口覆盖率 0.8%，总人口 40000）
+[导出] 覆盖图层 -> D:\桌面\QGIS-Agent\output\落地证明包\避难所覆盖_500m.gpkg
+[导出] 盲区图层 -> D:\桌面\QGIS-Agent\output\落地证明包\避难所盲区_500m.gpkg
+[导出] 盲区地图 PNG -> D:\桌面\QGIS-Agent\output\落地证明包\盲区地图.png (6881 bytes)
+（内容由AI生成，仅供参考）

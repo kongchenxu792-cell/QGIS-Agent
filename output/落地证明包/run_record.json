@@ -1,0 +1,112 @@
+{
+  "task": "L1620 落地证明包",
+  "date": "2026-08-29 23:39:58",
+  "model": "qwen3.5-4b",
+  "data_dir": "D:\\桌面\\QGIS-Agent\\temp\\synth_handcalc",
+  "out_dir": "D:\\桌面\\QGIS-Agent\\output\\落地证明包",
+  "radius_m": 500.0,
+  "expected": {
+    "coverage_rate": 0.7725,
+    "gap_rate": 99.2275,
+    "pop_coverage_rate": 0.7725
+  },
+  "tolerance": 0.01,
+  "summary": {
+    "total": 4,
+    "success": 4,
+    "fail": 0,
+    "steps": [
+      {
+        "index": 1,
+        "user_text": "对避难所创建 500 米缓冲区",
+        "llm_action": "create_buffer",
+        "llm_params": {
+          "layer_name": "避难所",
+          "distance": 500.0,
+          "selected_only": false
+        },
+        "final_action": "create_buffer",
+        "success": true,
+        "message": "缓冲区分析完成，新增图层：避难所_buffer_500.0m（1 个要素）",
+        "stats": {},
+        "dt_s": 0.0
+      },
+      {
+        "index": 2,
+        "user_text": "计算避难所的覆盖范围，边界用东京行政区",
+        "llm_action": "coverage_analysis",
+        "llm_params": {
+          "source_layer": "避难所",
+          "boundary_layer": "东京行政区",
+          "radius_m": 500.0
+        },
+        "final_action": "coverage_analysis",
+        "success": true,
+        "message": "覆盖率分析完成，新增图层：避难所_coverage_500.0m（1 个要素，500.0m 缓冲区，覆盖率 0.8%）",
+        "stats": {
+          "source_count": 1,
+          "radius_m": 500.0,
+          "total_area": 100000000.0,
+          "covered_area": 772542.4859371737,
+          "coverage_rate": 0.7725424859371737
+        },
+        "dt_s": 0.1
+      },
+      {
+        "index": 3,
+        "user_text": "分析避难所500米服务范围的盲区，边界用东京行政区",
+        "llm_action": "gap_analysis",
+        "llm_params": {
+          "source_layer": "避难所",
+          "boundary_layer": "东京行政区",
+          "radius_m": 500.0
+        },
+        "final_action": "gap_analysis",
+        "success": true,
+        "message": "盲区分析完成，新增图层：避难所_gap_500.0m（1 个要素，500.0m 缓冲区，盲区率 99.2%，盲区面积 99227458 m²）",
+        "stats": {
+          "source_count": 1,
+          "radius_m": 500.0,
+          "total_area": 100000000.0,
+          "covered_area": 772542.4859371737,
+          "gap_area": 99227457.51406282,
+          "coverage_rate": 0.7725424859371737,
+          "gap_rate": 99.22745751406282
+        },
+        "dt_s": 0.0
+      },
+      {
+        "index": 4,
+        "user_text": "计算避难所500米范围内的人口覆盖率，边界用东京行政区，人口字段用population",
+        "llm_action": "population_coverage",
+        "llm_params": {
+          "source_layer": "避难所",
+          "boundary_layer": "东京行政区",
+          "population_layer": "人口",
+          "population_field": "population",
+          "radius_m": 500.0
+        },
+        "final_action": "population_coverage",
+        "success": true,
+        "message": "人口覆盖率分析完成，新增图层：避难所_pop_coverage_500.0m（1 个要素，500.0m 缓冲区，面积覆盖率 0.8%，人口覆盖率 0.8%，总人口 40000）",
+        "stats": {
+          "source_count": 1,
+          "radius_m": 500.0,
+          "total_area": 100000000.0,
+          "covered_area": 772542.4859371736,
+          "coverage_rate": 0.7725424859371736,
+          "total_population": 40000.0,
+          "covered_population": 309.01699437486945,
+          "pop_coverage_rate": 0.7725424859371737
+        },
+        "dt_s": 0.1
+      }
+    ],
+    "exported": [
+      "D:\\桌面\\QGIS-Agent\\output\\落地证明包\\避难所覆盖_500m.gpkg",
+      "D:\\桌面\\QGIS-Agent\\output\\落地证明包\\避难所盲区_500m.gpkg",
+      "D:\\桌面\\QGIS-Agent\\output\\落地证明包\\盲区地图.png"
+    ]
+  },
+  "comparison_all_pass": true
+}

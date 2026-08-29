@@ -1,0 +1,6 @@
+# 输出文件清单
+
+D:\桌面\QGIS-Agent\output\落地证明包\避难所覆盖_500m.gpkg  (98304 bytes)
+D:\桌面\QGIS-Agent\output\落地证明包\避难所盲区_500m.gpkg  (98304 bytes)
+D:\桌面\QGIS-Agent\output\落地证明包\盲区地图.png  (6881 bytes)
+（内容由AI生成，仅供参考）
