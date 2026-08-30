@@ -1,0 +1,137 @@
+{
+  "task": "片A补充：LLM 全链验证 4 灾种",
+  "date": "2026-08-30 13:07:07",
+  "model": "qwen3.5-4b",
+  "data_dir": "D:\\桌面\\QGIS-Agent\\temp\\multi_disaster",
+  "out_dir": "D:\\桌面\\QGIS-Agent\\output\\片A补充_LLM全链验证",
+  "radius_m": 500.0,
+  "tolerance": 0.01,
+  "expected": {
+    "震度分布": 38.426968963612445,
+    "淹没区": 100.00000000000013,
+    "滑坡风险区": 17.078652872713416,
+    "火灾风险区": 68.31461149086756
+  },
+  "chain": "自然语言 → qwen3.5-4b → InstructionMapper → PipelineExecutor",
+  "engine_change": "none（引擎零改动）",
+  "summary": {
+    "total": 4,
+    "success": 4,
+    "fail": 0,
+    "steps": [
+      {
+        "index": 1,
+        "disaster": "地震",
+        "risk_zone": "震度分布",
+        "text": "计算避难所对震度分布区域的覆盖率",
+        "llm_action": "coverage_analysis",
+        "llm_params": {
+          "source_layer": "避难所",
+          "boundary_layer": "震度分布区域",
+          "radius_m": 500.0
+        },
+        "final_action": "coverage_analysis",
+        "status": "ok",
+        "success": true,
+        "message": "覆盖率分析完成，新增图层：避难所_coverage_500.0m（1 个要素，500.0m 缓冲区，覆盖率 38.4%）",
+        "stats": {
+          "source_count": 1,
+          "radius_m": 500.0,
+          "total_area": 2010417.4405967733,
+          "covered_area": 772542.4859371737,
+          "coverage_rate": 38.426968963612445
+        },
+        "expected_coverage_rate": 38.426968963612445,
+        "coverage_rate": 38.426968963612445,
+        "diff": 0.0,
+        "pass": true,
+        "dt_s": 0.1
+      },
+      {
+        "index": 2,
+        "disaster": "洪涝",
+        "risk_zone": "淹没区",
+        "text": "计算避难所对淹没区域的覆盖率",
+        "llm_action": "coverage_analysis",
+        "llm_params": {
+          "source_layer": "避难所",
+          "boundary_layer": "淹没区域",
+          "radius_m": 500.0
+        },
+        "final_action": "coverage_analysis",
+        "status": "ok",
+        "success": true,
+        "message": "覆盖率分析完成，新增图层：避难所_coverage_500.0m（1 个要素，500.0m 缓冲区，覆盖率 100.0%）",
+        "stats": {
+          "source_count": 1,
+          "radius_m": 500.0,
+          "total_area": 502604.36014940124,
+          "covered_area": 502604.36014940194,
+          "coverage_rate": 100.00000000000013
+        },
+        "expected_coverage_rate": 100.00000000000013,
+        "coverage_rate": 100.00000000000013,
+        "diff": 0.0,
+        "pass": true,
+        "dt_s": 0.0
+      },
+      {
+        "index": 3,
+        "disaster": "滑坡",
+        "risk_zone": "滑坡风险区",
+        "text": "计算避难所对滑坡风险区的覆盖率",
+        "llm_action": "coverage_analysis",
+        "llm_params": {
+          "source_layer": "避难所",
+          "boundary_layer": "滑坡风险区",
+          "radius_m": 500.0
+        },
+        "final_action": "coverage_analysis",
+        "status": "ok",
+        "success": true,
+        "message": "覆盖率分析完成，新增图层：避难所_coverage_500.0m（1 个要素，500.0m 缓冲区，覆盖率 17.1%）",
+        "stats": {
+          "source_count": 1,
+          "radius_m": 500.0,
+          "total_area": 4523439.241343594,
+          "covered_area": 772542.4859371737,
+          "coverage_rate": 17.078652872713416
+        },
+        "expected_coverage_rate": 17.078652872713416,
+        "coverage_rate": 17.078652872713416,
+        "diff": 0.0,
+        "pass": true,
+        "dt_s": 0.0
+      },
+      {
+        "index": 4,
+        "disaster": "火灾",
+        "risk_zone": "火灾风险区",
+        "text": "计算避难所对火灾风险区的覆盖率",
+        "llm_action": "coverage_analysis",
+        "llm_params": {
+          "source_layer": "避难所",
+          "boundary_layer": "火灾风险区",
+          "radius_m": 500.0
+        },
+        "final_action": "coverage_analysis",
+        "status": "ok",
+        "success": true,
+        "message": "覆盖率分析完成，新增图层：避难所_coverage_500.0m（1 个要素，500.0m 缓冲区，覆盖率 68.3%）",
+        "stats": {
+          "source_count": 1,
+          "radius_m": 500.0,
+          "total_area": 1130859.8103356685,
+          "covered_area": 772542.4859371737,
+          "coverage_rate": 68.31461149086756
+        },
+        "expected_coverage_rate": 68.31461149086756,
+        "coverage_rate": 68.31461149086756,
+        "diff": 0.0,
+        "pass": true,
+        "dt_s": 0.0
+      }
+    ]
+  },
+  "all_pass": true
+}

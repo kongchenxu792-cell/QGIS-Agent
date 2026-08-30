@@ -1,0 +1,162 @@
+{
+  "action": "coverage_analysis",
+  "disaster_family": "risk_zone_coverage",
+  "zh_triggers": ["危险区覆盖", "灾害覆盖", "灾种覆盖", "多灾种覆盖", "震度覆盖", "淹没覆盖", "滑坡覆盖", "火灾覆盖", "风险区覆盖", "覆盖率", "覆盖分析"],
+  "ja_triggers": ["危険区域カバー", "災害カバー", "災種カバー", "震度カバー", "浸水カバー", "地すべりカバー", "火災カバー", "カバー率", "カバレッジ"],
+  "en_triggers": ["risk zone coverage", "disaster coverage", "hazard coverage", "seismic coverage", "flood coverage", "landslide coverage", "wildfire coverage", "coverage", "coverage analysis"],
+  "output_base": "user_data/exports/shapefiles/",
+  "output_check": {"empty": "degraded"},
+  "params": [
+    {
+      "name": "source_layer",
+      "type": "layer",
+      "role": "source",
+      "required": true,
+      "comment": "源点图层（如避难所），自动从已加载图层匹配"
+    },
+    {
+      "name": "boundary_layer",
+      "type": "layer",
+      "role": "boundary",
+      "required": true,
+      "comment": "危险区面图层（如震度分布/淹没区/滑坡风险区/火灾风险区），自动从已加载图层匹配。多灾种场景下该参数即灾种风险区"
+    },
+    {
+      "name": "radius_m",
+      "type": "float",
+      "default": 500.0,
+      "comment": "缓冲区半径（米）"
+    }
+  ],
+  "guards_on_fail": "error",
+  "guards": [
+    {"condition": "crs_projected", "on_fail": "error"},
+    {"condition": "source_is_vector", "on_fail": "error"},
+    {"condition": "source_is_point", "params": {"geometry_type": 0}, "on_fail": "error"},
+    {"condition": "boundary_is_polygon", "params": {"geometry_type": 2}, "on_fail": "error"},
+    {"condition": "boundary_fc_limit", "params": {"max": 10000}, "on_fail": "warn"},
+    {"condition": "shapely_available", "on_fail": "error"},
+    {"condition": "crs_match", "params": {"auto_reproject": true}, "on_fail": "error"}
+  ],
+  "steps": [
+    {
+      "id": "boundary_dissolve",
+      "input_source": "$boundary_layer",
+      "params": {
+        "FIELD": [],
+        "OUTPUT": "memory:"
+      },
+      "engine": {
+        "primary": {"name": "qgis_processing", "algorithm": "native:dissolve"}
+      },
+      "log": "[RISK_COVERAGE] 溶解危险区图层: {fc} 要素",
+      "comment": "将危险区多面合并为单一多边形"
+    },
+    {
+      "id": "boundary_buffer",
+      "input_source": "$boundary_dissolve.output",
+      "params": {
+        "DISTANCE": "$radius_m",
+        "SEGMENTS": 5,
+        "OUTPUT": "memory:"
+      },
+      "engine": {
+        "primary": {"name": "qgis_processing", "algorithm": "native:buffer"}
+      },
+      "log": "[RISK_COVERAGE] 危险区缓冲区: radius={radius}m",
+      "comment": "危险区外扩一个半径，用于空间粗筛扩大范围"
+    },
+    {
+      "id": "spatial_filter",
+      "input_source": "$source_layer",
+      "input_boundary": "$boundary_buffer.output",
+      "params": {
+        "buffer_radius": "$radius_m",
+        "max_features": 10000
+      },
+      "engine": {
+        "primary": {"name": "qgis_spatial_index"}
+      },
+      "log": "[RISK_COVERAGE] 空间筛选完成: candidates={candidates} selected={selected}",
+      "comment": "用 QgsSpatialIndex 粗筛 + QgsGeometry.intersects 精筛，大幅减少后续处理量"
+    },
+    {
+      "id": "buffer",
+      "input_source": "$spatial_filter.output",
+      "params": {
+        "DISTANCE": "$radius_m",
+        "SEGMENTS": 5,
+        "OUTPUT": "memory:"
+      },
+      "engine": {
+        "primary": {"name": "qgis_processing", "algorithm": "native:buffer", "validate": "fc > 0"},
+        "fallback": [
+          {"name": "shapely", "method": "buffer", "validate": "fc > 0"}
+        ]
+      },
+      "log": "[RISK_COVERAGE] 缓冲区: radius={radius}m, fc={fc}",
+      "comment": "对筛选后的点做缓冲区。QGIS processing 在 EPSG:3857 大坐标下可能静默返回 0，fallback 到 Shapely"
+    },
+    {
+      "id": "dissolve",
+      "input_source": "$buffer.output",
+      "params": {
+        "FIELD": [],
+        "OUTPUT": "memory:"
+      },
+      "engine": {
+        "primary": {"name": "qgis_processing", "algorithm": "native:dissolve", "validate": "fc > 0"},
+        "fallback": [
+          {"name": "shapely", "method": "union", "validate": "fc > 0 && area > 0"}
+        ]
+      },
+      "log": "[RISK_COVERAGE] 溶解完成: fc={fc}",
+      "comment": "合并所有缓冲区圆为单个多边形。同大坐标 fallback"
+    },
+    {
+      "id": "clip",
+      "input_source": "$dissolve.output",
+      "input_boundary": "$boundary_dissolve.output",
+      "params": {
+        "OUTPUT": "memory:"
+      },
+      "engine": {
+        "primary": {"name": "qgis_processing", "algorithm": "native:clip", "validate": "fc > 0 && t > 0.1s"},
+        "fallback": [
+          {"name": "qgis_processing", "algorithm": "native:intersection", "validate": "fc > 0 && t > 0.1s"},
+          {"name": "shapely_wkt", "method": "intersection", "validate": "not is_empty && area > 0"}
+        ]
+      },
+      "log": "[RISK_COVERAGE] 裁剪完成: fc={fc}, area={covered_area:.0f} m²",
+      "comment": "合并的缓冲区与危险区求交集。native:clip → native:intersection → Shapely WKT 三级 fallback"
+    },
+    {
+      "id": "stats",
+      "input_source": "$clip.output",
+      "input_boundary": "$boundary_dissolve.output",
+      "engine": {
+        "primary": {"name": "shapely", "method": "area", "validate": "covered_area > 0"}
+      },
+      "output_keys": ["source_count", "radius_m", "total_area", "covered_area", "coverage_rate"],
+      "log": "[RISK_COVERAGE] 危险区覆盖率: {coverage_rate:.1f}% (covered={covered_area:.0f} / total={total_area:.0f} m²)",
+      "comment": "面积统计强制走 Shapely（QGIS g.area() 大坐标下返回 0）"
+    },
+    {
+      "id": "output_layer",
+      "input_source": "$clip.output",
+      "params": {
+        "name_template": "{source_name}_riskcoverage_{radius_m}m",
+        "add_to_project": true,
+        "zoom_to_layer": true
+      },
+      "engine": {
+        "primary": {"name": "qgis_memory_layer", "validate": "area > 0"},
+        "fallback": [
+          {"name": "geojson_file", "path_template": "{output_dir}/{source_name}_riskcoverage_{radius_m}m.geojson", "validate": "not is_empty"}
+        ]
+      },
+      "log": "[RISK_COVERAGE] 输出图层: {layer_name} ({fc} 要素)",
+      "comment": "输出到画布。小坐标用内存图层，大坐标自动降级为 GeoJSON 文件落地"
+    }
+  ]
+}
