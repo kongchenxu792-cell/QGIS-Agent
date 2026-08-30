@@ -1,4 +1,15 @@
-# QGIS-Agent v2.0.0 — AI 驱动的桌面 GIS 智能助手
+---
+AIGC:
+    Label: "1"
+    ContentProducer: 001191440300708461136T1XGW3
+    ProduceID: a024fff57185fad8e983aecfc0decd09_f2ad1af0a46411f193c6525400f8a581
+    ReservedCode1: SrsnZwEEOqgf7Pn6215H96LsFqOrUmmL+GjUWf33cp4e93TLixQRRcTZkYMJhQflHvMWkks5WSidopz9hfdeFDHNyTOgxvzQEhj/RSi+6wQ5WyRNh9kx3GeqYFSiWZ+TXhthnWdns6nCKO0v/oEn3x8UsUso42scXeuHfs3EnEnU4dzJQOgPuIhoi+s=
+    ContentPropagator: 001191440300708461136T1XGW3
+    PropagateID: a024fff57185fad8e983aecfc0decd09_f2ad1af0a46411f193c6525400f8a581
+    ReservedCode2: SrsnZwEEOqgf7Pn6215H96LsFqOrUmmL+GjUWf33cp4e93TLixQRRcTZkYMJhQflHvMWkks5WSidopz9hfdeFDHNyTOgxvzQEhj/RSi+6wQ5WyRNh9kx3GeqYFSiWZ+TXhthnWdns6nCKO0v/oEn3x8UsUso42scXeuHfs3EnEnU4dzJQOgPuIhoi+s=
+---
+
+# QGIS-Agent v2.0.0 — 多灾种快速评估 + 自然语言驱动的桌面 GIS 智能助手
 
 > 说一句话，完成 GIS 分析。无需安装 QGIS，双击即用。
 
@@ -83,10 +94,10 @@
 ### 离线模式（数据完全本地）
 
 1. 安装 [Ollama](https://ollama.com/download/windows)
-2. 拉取模型：`ollama pull qwen2.5:7b`
+2. 拉取模型：`ollama pull qwen3.5-4b`
 3. 在 QGIS-Agent 顶部切换到「离线模式」即可
 
-> 离线模式无需联网，无需 API Key，所有数据不出本机。
+> 离线模式无需联网，无需 API Key，所有数据不出本机。离线链路走 Ollama `/api/chat`（num_ctx 4096，expect_json 自动重试），灾种识别率 96%。
 
 ---
 
@@ -118,13 +129,40 @@
 
 **政策依据**：日本内阁府令和 8 年 6 月 12 日阁议决定《首都直下地震紧急对策推进基本计划》规定——都心南部直下地震想定死者最大约 1.8 万人、建筑全坏烧失约 40 万栋，今后 10 年间半减为减灾目标。本工具为该计划要求的「膨大な人的・物的被害への対応強化」提供自动化基础分析。
 
+### 多灾种快速评估（可插拔注册 + 一键报告）
+
+在单一地震链路之上，新增**多灾种注册表**驱动的快速评估能力，灾种可插拔扩展，引擎零改动。
+
+- **多灾种注册表**（`src/core/disaster_registry.py`）：以注册表条目描述灾种的数据目录、模板、预警阈值等，新增灾种只需注册条目，无需改引擎 / Guards / 模板 / CRS 逻辑。当前内置日本 4 灾种 + 中国成都（`chengdu`，country=CN，data_dir 条目级覆盖）。
+- **灾种下拉 + 自然语言**：界面通过灾种下拉锁定评估对象，同时支持自然语言指令，经 LLM 识别后走同一条确定性管道。
+- **一键风险评估报告**（`src/core/report_generator.py`）：评估完成后自动生成 `user_data/reports/risk_report_*.md`，并触发**阈值预警**（如覆盖率低于预警阈值 50% 时给出布点核查建议）。
+- **run 记录**（`src/core/run_queue.py` + `output/.../run_record.json`）：每次运行自动留痕，记录数据源、链路参数、统计结果、报告路径与审计结论，全程可追溯。
+
+### 中国真实数据验证（成都）
+
+用中国真实数据（成都：避难所 39 点 / 行政区 / 人口格网 19365，EPSG:3857，半径 500m）跑通三链，全部 PASS 并触发预警。
+
+| 链路 | 指标 | 结果 | 状态 |
+|------|------|------|------|
+| coverage | 覆盖率 | 0.148% | 成功 |
+| gap | 盲区率 | 99.85% | 成功 |
+| population_coverage | 人口覆盖率 | 2.53% | 成功 |
+
+- 独立复算覆盖面积 vs 引擎：相对偏差 **0.0000%**（容差 ±1%）→ PASS
+- 一致性校验（gap_rate vs 100-coverage_rate）：偏差 **0.0000%** → PASS
+- 预警：「成都」危险区覆盖率仅为 0.15%，低于预警阈值 50.00%，建议核查避难所布点
+- 注册表新增 `chengdu` 条目，现有 4 灾种零改动；引擎 / Guards / 模板 / CRS 零改动
+- 跑通脚本：`scripts/run_chengdu.py`；结果表：`output/成都正式跑通/results_table.md`；运行记录：`output/成都正式跑通/run_record.json`
+
+> 更多落地证据见 [docs/e2e_acceptance_plan.md](docs/e2e_acceptance_plan.md) 验收计划与 [output/落地证明包](output/落地证明包) 证明包。
+
 ### 架构特色
 
 ```
-用户输入（自然语言）
+用户输入（自然语言 / 灾种下拉）
     │
     ▼
-AI 意图识别（在线 Qwen-Plus / 离线 Qwen2.5 7B）
+灾种下拉（注册表可插拔）──► AI 意图识别（在线 Qwen-Plus / 离线 Qwen3.5-4B）
     │
     ▼
 {action, params} JSON ───→ InstructionMapper.match_and_execute()
@@ -137,12 +175,17 @@ Pipeline 确定性执行（8 步引擎 + Shapely fallback 全链路）
     │
     ▼
 结果输出（覆盖率 / 图层 / CSV / 可追溯日志）
+    │
+    ▼
+一键风险评估报告 + 阈值预警（risk_report_*.md + run_record.json）
 ```
 
-- **在线和离线走同一条管道**——AI 只负责理解意图和填参数，不碰实际计算
+- **AI 只负责理解意图和填参数，不碰实际计算**——在线和离线走同一条确定性管道，灾种识别由注册表 + LLM 双确认
+- **多灾种可插拔**——注册表驱动，新增灾种不改引擎 / Guards / 模板
 - **CRS 自动检测和修正**——地理坐标系（度）下自动拦截，避免缓冲区算出错误结果
 - **Shapely 全链路 fallback**——QGIS 大坐标处理异常时自动降级到 Shapely 引擎
 - **Pipeline 中途失败自动回滚**——不会留下半成品中间图层
+- **一键报告 + 阈值预警**——评估结果自动沉淀为报告并触发阈值预警
 
 ---
 
@@ -170,6 +213,12 @@ QGIS-Agent/
 │   │   │   ├── gap_analysis.json
 │   │   │   ├── population_coverage.json
 │   │   │   └── building_risk.json
+│   │   ├── disaster_registry.py  # 多灾种注册表（可插拔，日本 4 灾种 + 成都）
+│   │   ├── report_generator.py   # 一键风险评估报告 + 阈值预警
+│   │   ├── run_queue.py          # run 记录（run_record.json 留痕）
+│   │   ├── result_contract.py    # 结果契约（统计/报告/预警统一结构）
+│   │   ├── output_persistence.py # 结果持久化
+│   │   ├── offline_workflows.py  # 离线工作流（Ollama /api/chat 链路）
 │   │   ├── sandbox_worker.py   # 沙箱执行引擎（已封存，保留备审计）
 │   │   ├── fallback_utils.py   # Shapely 全链路 fallback（大坐标兜底）
 │   │   ├── qgis_env.py         # QGIS 便携环境引导
@@ -182,8 +231,20 @@ QGIS-Agent/
 │   ├── prompt_agent/           # 提示词调试工具
 │   ├── i18n/                   # 中/日/英三语（各 219 键）
 │   └── ui/                     # PyQt5 界面层
-├── tests/                      # 88 个单元测试
-└── docs/                       # 文档和变更日志
+├── scripts/
+│   ├── run_chengdu.py          # 成都三链跑通脚本
+│   ├── multi_disaster_llm.py   # 多灾种 LLM 全链验证
+│   ├── proof_of_run.py         # 运行留痕证明
+│   └── ...
+├── tests/                      # 180 个单元测试 + 20 subtests
+├── docs/
+│   ├── e2e_acceptance_plan.md  # 端到端验收计划
+│   └── ...
+└── output/
+    ├── 成都正式跑通/           # 成都三链结果表 + run_record.json
+    ├── 片A补充_LLM全链验证/
+    ├── 落地证明包/             # 落地证明包
+    └── ...
 ```
 
 ---
@@ -196,10 +257,11 @@ QGIS-Agent/
 | GIS 引擎 | QGIS 3.44 (PyQGIS) |
 | 几何计算 | Shapely 2.x（全链路 fallback） |
 | 在线 AI | 阿里云 DashScope Qwen-Plus |
-| 离线 AI | Ollama + Qwen2.5:7B |
+| 离线 AI | Ollama + Qwen3.5-4B（/api/chat，num_ctx 4096，expect_json 重试，识别率 96%） |
+| 多灾种 | disaster_registry 注册表（可插拔） |
 | 指令解析 | JSON 模板匹配 + keyword 纠偏 + 三层容错 |
 | 国际化 | 中文 / 日文 / English（219 键完全对齐） |
-| 测试 | pytest（88 用例，0.45s 全量通过） |
+| 测试 | pytest（180 用例 + 20 subtests，全量 206+20） |
 
 ---
 
@@ -209,8 +271,16 @@ QGIS-Agent/
 # 一键运行全部测试（需要 portable QGIS 环境）
 tests\run_tests.bat -v
 
-# 预期输出：88 passed in 0.45s
+# 预期输出：180 passed + 20 subtests（全量 206+20）
 ```
+
+---
+
+## 验收与落地证明
+
+- **端到端验收计划**：[docs/e2e_acceptance_plan.md](docs/e2e_acceptance_plan.md)
+- **落地证明包**：[output/落地证明包](output/落地证明包)
+- **中国真实数据验证**：[output/成都正式跑通/results_table.md](output/成都正式跑通/results_table.md)
 
 ---
 
@@ -236,5 +306,4 @@ tests\run_tests.bat -v
 - **作者**：kongchenxu792
 - **邮箱**：kongchenxu792@gmail.com
 - **仓库**：[github.com/kongchenxu792-cell/QGIS-Agent](https://github.com/kongchenxu792-cell/QGIS-Agent)
-
-
+*（内容由AI生成，仅供参考）*
