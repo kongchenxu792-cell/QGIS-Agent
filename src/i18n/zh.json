@@ -220,5 +220,12 @@
   "risk_cancel": "取消",
   "clarif_title": "需要澄清",
   "clarif_question": "「{role}」角色存在多个候选图层，请选择：",
-  "clarif_cancel": "取消"
+  "clarif_cancel": "取消",
+  "disaster_label": "灾种：",
+  "disaster_auto": "自动识别",
+  "disaster_tooltip": "选择灾种后运行分析将自动生成风险评估报告；保持「自动识别」时由 AI 从指令中判断灾种。",
+  "report_title": "多灾种风险评估报告",
+  "report_generated": "已生成风险评估报告：{path}",
+  "report_warning_low_coverage": "「{disaster}」危险区覆盖率仅为 {rate}%，低于预警阈值 {threshold}%，建议核查避难所布点。",
+  "report_no_stats": "本次分析未返回覆盖率统计，无法生成报告。"
 }

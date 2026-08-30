@@ -48,3 +48,6 @@ reports/
 # 引擎分发压缩包（GitHub 100MB 限制，由 GitHub Release 托管）
 qgis-engine-*.zip
 
+# 个人学习资料（不随项目上传 GitHub）
+学习资料/
+

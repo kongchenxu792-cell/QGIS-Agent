@@ -220,5 +220,12 @@
   "risk_cancel": "キャンセル",
   "clarif_title": "確認が必要です",
   "clarif_question": "「{role}」役割に複数の候補レイヤがあります。選択してください：",
-  "clarif_cancel": "キャンセル"
+  "clarif_cancel": "キャンセル",
+  "disaster_label": "災種：",
+  "disaster_auto": "自動判定",
+  "disaster_tooltip": "災種を選択して分析を実行すると、リスク評価レポートが自動生成されます。「自動判定」のままの場合は、AIが指示文から災種を判断します。",
+  "report_title": "多災種リスク評価レポート",
+  "report_generated": "リスク評価レポートを生成しました：{path}",
+  "report_warning_low_coverage": "「{disaster}」の危険区域カバー率はわずか {rate}% で、警告閾値 {threshold}% を下回っています。避難所の配置を確認することをお勧めします。",
+  "report_no_stats": "この分析ではカバー率統計が返されなかったため、レポートを生成できません。"
 }

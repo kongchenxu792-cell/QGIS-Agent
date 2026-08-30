@@ -88,11 +88,13 @@ from core.ai_worker import (
     request_spatial_code,
 )
 from core.config_manager import ConfigManager
+from core.disaster_registry import find_disaster_by_text, get_disaster_name, list_disasters
 from core.instruction_mapper import InstructionMapper
 from core.layer_loader import create_layer_from_path, is_supported_path, is_table_path, load_layers_from_paths
 from core.output_persistence import generate_output_path, generate_geojson_output_path
 from core.project_manager import ProjectManager
 from core.qgis_env import QgisBootstrapResult
+from core.report_generator import generate_report
 from core.run_queue import get_run_queue
 from skills.style_manager import style_manager
 from ui.api_config_dialog import ApiConfigDialog
@@ -430,6 +432,10 @@ class MainWindow(QMainWindow):
 
         # i18n 语言管理器（必须在 UI 组件之前初始化）
         self._lm = lang_manager()
+
+        # 片B：灾种下拉（自动识别 + 注册灾种），一键分析后自动生成风险评估报告
+        self.disaster_combo: Optional["QComboBox"] = None
+        self.disaster_label: Optional[QLabel] = None
 
         self.ai_prompt_input = QTextEdit(self)
         self.ai_prompt_input.setAccessibleName("ai_prompt_input")
@@ -818,6 +824,14 @@ class MainWindow(QMainWindow):
         else:
             self.ai_prompt_input.setPlaceholderText(lm.tr("ai_placeholder_online"))
         self.ai_prompt_input.setToolTip(lm.tr("ai_tooltip"))
+
+        # 片B：灾种下拉刷新（i18n 切换时重建选项并保持选中灾种）
+        if self.disaster_label is not None:
+            self.disaster_label.setText(lm.tr("disaster_label"))
+            self.disaster_label.setToolTip(lm.tr("disaster_tooltip"))
+        if self.disaster_combo is not None:
+            self.disaster_combo.setToolTip(lm.tr("disaster_tooltip"))
+            self._populate_disaster_combo()
 
         self.ai_response_display.setPlaceholderText(lm.tr("ai_response_placeholder"))
         self.ai_response_display.setToolTip(lm.tr("ai_response_tooltip"))
@@ -1585,6 +1599,22 @@ class MainWindow(QMainWindow):
         input_row = QHBoxLayout()
         input_row.setSpacing(12)
 
+        # 片B：灾种选择下拉（自动识别 + 注册灾种）
+        from PyQt5.QtWidgets import QComboBox
+        disaster_column = QVBoxLayout()
+        disaster_column.setContentsMargins(0, 0, 0, 0)
+        disaster_column.setSpacing(6)
+        self.disaster_label = QLabel(self._lm.tr("disaster_label"), self)
+        self.disaster_label.setStyleSheet("font-weight: 600; color: #16202a;")
+        self.disaster_combo = QComboBox(self)
+        self.disaster_combo.setObjectName("disasterCombo")
+        self.disaster_combo.setToolTip(self._lm.tr("disaster_tooltip"))
+        self.disaster_combo.setMinimumWidth(150)
+        self._populate_disaster_combo()
+        disaster_column.addWidget(self.disaster_label)
+        disaster_column.addWidget(self.disaster_combo)
+        input_row.addLayout(disaster_column)
+
         self.ai_prompt_input.setObjectName("aiPromptInput")
         self.ai_prompt_input.setPlaceholderText(
             "请输入自然语言空间分析指令，例如：“为当前图层创建 30 米缓冲区”"
@@ -1615,6 +1645,26 @@ class MainWindow(QMainWindow):
         self.ai_response_display.setFixedHeight(120)
         main_layout.addWidget(self.ai_response_display)
         return container
+
+    def _populate_disaster_combo(self) -> None:
+        """按当前语言填充灾种下拉：自动识别 + 全部注册灾种。"""
+        if self.disaster_combo is None:
+            return
+        current = self.disaster_combo.currentData()
+        lm = lang_manager()
+        self.disaster_combo.blockSignals(True)
+        self.disaster_combo.clear()
+        self.disaster_combo.addItem(lm.tr("disaster_auto"), None)
+        for info in list_disasters():
+            did = info.get("disaster_id")
+            if not did:
+                continue
+            self.disaster_combo.addItem(get_disaster_name(did, lm.current_lang), did)
+        if current is not None:
+            idx = self.disaster_combo.findData(current)
+            if idx >= 0:
+                self.disaster_combo.setCurrentIndex(idx)
+        self.disaster_combo.blockSignals(False)
 
     def _apply_styles(self) -> None:
         """应用现代化简约样式表。"""
@@ -2568,6 +2618,8 @@ class MainWindow(QMainWindow):
                 # 自动加载管道输出的图层文件
                 if output_file and os.path.exists(output_file):
                     self._add_layer_from_file(output_file)
+                # 片B：覆盖类分析完成后自动生成风险评估报告
+                self._maybe_generate_disaster_report(offline_args, user_text)
                 append_to_history("user", user_text)
                 append_to_history("assistant", offline_msg[:500])
                 return
@@ -2702,6 +2754,10 @@ class MainWindow(QMainWindow):
                 if ctx_key in result:
                     pipeline_context[ctx_key] = result[ctx_key]
 
+            # 片B：coverage 类分析完成后自动生成风险评估报告
+            if result.get("success") and result.get("stats"):
+                self._maybe_generate_disaster_report(result, user_text)
+
         # 流水线完成，写入对话记忆
         final_summary = "\n".join(summary_parts) if summary_parts else "流水线已完成。"
         self.ai_response_display.append(f"\n--- 流水线结果 ---\n{final_summary}")
@@ -2737,6 +2793,48 @@ class MainWindow(QMainWindow):
                 _log.warning("degraded 场景自动保存工程失败: %s", _e)
 
         _log.info("流水线执行结束，记忆已持久化")
+
+    def _maybe_generate_disaster_report(self, result: Dict[str, Any], user_text: str) -> None:
+        """片B：coverage 类分析结果 → 自动生成风险评估报告 + 阈值预警。
+
+        仅在 result 含 stats.coverage_rate 且可确定灾种时生成；
+        无法确定灾种（下拉为自动识别且指令无灾种触发词）时静默跳过。
+        """
+        stats = result.get("stats") or {}
+        if not stats or "coverage_rate" not in stats:
+            return
+        try:
+            # 灾种确定优先级：UI 下拉选中 > 指令触发词自动识别
+            disaster_id = None
+            if self.disaster_combo is not None:
+                disaster_id = self.disaster_combo.currentData()
+            if not disaster_id:
+                hit = find_disaster_by_text(user_text, lang=self._lm.current_lang)
+                disaster_id = hit.get("disaster_id") if hit else None
+            if not disaster_id:
+                return
+
+            gen = generate_report(
+                disaster_id=disaster_id,
+                stats=stats,
+                lang=self._lm.current_lang,
+                user_text=user_text,
+            )
+            if not gen.get("success"):
+                self.statusBar().showMessage(self._lm.tr("report_no_stats"), 5000)
+                return
+
+            report_msg = self._lm.tr("report_generated", path=gen["report_path"])
+            self.statusBar().showMessage(report_msg, 8000)
+            self.ai_response_display.append(f"\n📄 {report_msg}")
+            if gen.get("warning"):
+                QMessageBox.warning(
+                    self,
+                    self._lm.tr("report_warning_low_coverage"),
+                    gen["warning"],
+                )
+        except Exception as exc:  # 报告生成失败不影响主流程
+            _log.warning("片B 风险评估报告生成失败: %s", exc)
 
     def _handle_ai_response(self, response_text: str) -> None:
         """解析 AI JSON 路由指令（旧版兼容，单对象格式）。"""

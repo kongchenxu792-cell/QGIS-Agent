@@ -220,5 +220,12 @@
   "risk_cancel": "Cancel",
   "clarif_title": "Clarification Required",
   "clarif_question": "Multiple candidate layers exist for the \"{role}\" role, please choose:",
-  "clarif_cancel": "Cancel"
+  "clarif_cancel": "Cancel",
+  "disaster_label": "Disaster:",
+  "disaster_auto": "Auto",
+  "disaster_tooltip": "Select a disaster type to auto-generate a risk assessment report after analysis; keep \"Auto\" to let the AI detect the disaster from your instruction.",
+  "report_title": "Multi-Disaster Risk Assessment Report",
+  "report_generated": "Risk assessment report generated: {path}",
+  "report_warning_low_coverage": "\"{disaster}\" hazard-zone coverage is only {rate}%, below the warning threshold {threshold}%. Review shelter placement.",
+  "report_no_stats": "No coverage statistics returned by this analysis; report generation skipped."
 }

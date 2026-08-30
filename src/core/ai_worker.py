@@ -647,6 +647,7 @@ class AIProcessingWorker(QThread):
             return self._request_online_pipeline(current_layer_metadata)
 
         # 返回一个特殊流水线，由 _execute_pipeline 处理离线响应
+        # 片B：透传 stats / output_file，供报告生成挂接（只读透传，不改执行逻辑）
         return json.dumps([{
             "skill": "_offline_response",
             "arguments": json.dumps({
@@ -655,6 +656,8 @@ class AIProcessingWorker(QThread):
                 "message": result.get("message", ""),
                 "action": result.get("action", ""),
                 "clarification": result.get("clarification"),
+                "stats": result.get("stats") or {},
+                "output_file": result.get("output_file", ""),
             }),
             "reasoning": f"离线模式：{result.get('action', '问答')}",
         }], ensure_ascii=False)
