@@ -2,6 +2,14 @@
 
 > 说一句话，完成 GIS 分析。无需安装 QGIS，双击即用。
 
+## 界面预览
+
+<p align="center">
+  <img src="docs/screenshots/启动后的主页.png" alt="启动后的主页" width="45%"/>
+  <img src="docs/screenshots/运行实例截图.png" alt="运行实例截图" width="45%"/>
+</p>
+
+
 [![GitHub](https://img.shields.io/badge/GitHub-QGIS--Agent-blue)](https://github.com/kongchenxu792-cell/QGIS-Agent)
 
 ---
