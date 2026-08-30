@@ -1,11 +1,11 @@
 {
   "task": "中国数据正式跑通：成都 覆盖/盲区/人口覆盖 + 报告预警",
-  "date": "2026-08-30 17:19:38",
+  "date": "2026-08-30 19:49:18",
   "data_dir": "D:\\桌面\\项目测试数据\\中国\\成都",
   "out_dir": "D:\\桌面\\QGIS-Agent\\output\\成都正式跑通",
   "radius_m": 500.0,
   "layers": {
-    "source": "chengdu_shelters_reference_3857.gpkg (39点, 参考版)",
+    "source": "避难所_3857.gpkg (215点, 正式版)",
     "boundary": "行政区_3857.gpkg (1要素)",
     "population": "人口_3857.gpkg (19365格网, population字段)"
   },
@@ -20,16 +20,16 @@
         "chain": "coverage",
         "success": true,
         "stats": {
-          "source_count": 39,
+          "source_count": 202,
           "radius_m": 500.0,
           "total_area": 19445083751.248985,
-          "covered_area": 28805877.717608806,
-          "coverage_rate": 0.14813964334691312
+          "covered_area": 92163042.58373527,
+          "coverage_rate": 0.47396577851106203
         },
         "res": {
           "status": "ok",
           "action": null,
-          "message": "覆盖率分析完成，新增图层：chengdu_shelters_reference_3857_riskcoverage_500.0m（1 个要素，500.0m 缓冲区，覆盖率 0.1%）",
+          "message": "覆盖率分析完成，新增图层：避难所_3857_riskcoverage_500.0m（1 个要素，500.0m 缓冲区，覆盖率 0.5%）",
           "info": ""
         }
       },
@@ -37,18 +37,18 @@
         "chain": "gap",
         "success": true,
         "stats": {
-          "source_count": 39,
+          "source_count": 202,
           "radius_m": 500.0,
           "total_area": 19445083751.248985,
-          "covered_area": 28805877.717608806,
-          "gap_area": 19416277873.531376,
-          "coverage_rate": 0.14813964334691312,
-          "gap_rate": 99.85186035665309
+          "covered_area": 92163042.58373527,
+          "gap_area": 19352920708.66525,
+          "coverage_rate": 0.47396577851106203,
+          "gap_rate": 99.52603422148894
         },
         "res": {
           "status": "ok",
           "action": null,
-          "message": "盲区分析完成，新增图层：chengdu_shelters_reference_3857_gap_500.0m（1 个要素，500.0m 缓冲区，盲区率 99.9%，盲区面积 19416277874 m²）",
+          "message": "盲区分析完成，新增图层：避难所_3857_gap_500.0m（1 个要素，500.0m 缓冲区，盲区率 99.5%，盲区面积 19352920709 m²）",
           "info": ""
         }
       },
@@ -56,19 +56,19 @@
         "chain": "population_coverage",
         "success": true,
         "stats": {
-          "source_count": 39,
+          "source_count": 202,
           "radius_m": 500.0,
           "total_area": 19445083751.248985,
-          "covered_area": 28805877.717609152,
-          "coverage_rate": 0.14813964334691493,
+          "covered_area": 91390500.09779888,
+          "coverage_rate": 0.46999283349411514,
           "total_population": 18699732.60686221,
-          "covered_population": 473072.1339491098,
-          "pop_coverage_rate": 2.5298336820896963
+          "covered_population": 511563.96377764136,
+          "pop_coverage_rate": 2.7356752876237045
         },
         "res": {
           "status": "ok",
           "action": null,
-          "message": "人口覆盖率分析完成，新增图层：chengdu_shelters_reference_3857_pop_coverage_500.0m（1 个要素，500.0m 缓冲区，面积覆盖率 0.1%，人口覆盖率 2.5%，总人口 18699733）",
+          "message": "人口覆盖率分析完成，新增图层：避难所_3857_pop_coverage_500.0m（1 个要素，500.0m 缓冲区，面积覆盖率 0.5%，人口覆盖率 2.7%，总人口 18699733）",
           "info": ""
         }
       }
@@ -76,20 +76,20 @@
   },
   "report": {
     "success": true,
-    "report_path": "D:\\桌面\\QGIS-Agent\\user_data\\reports\\risk_report_20260830_171938_chengdu.md",
-    "warning": "「成都」危险区覆盖率仅为 0.15%，低于预警阈值 50.00%，建议核查避难所布点。",
+    "report_path": "D:\\桌面\\QGIS-Agent\\user_data\\reports\\risk_report_20260830_194918_chengdu.md",
+    "warning": "「成都」危险区覆盖率仅为 0.47%，低于预警阈值 50.00%，建议核查避难所布点。",
     "disaster_name": "成都",
-    "coverage_rate": 0.14813964334691312
+    "coverage_rate": 0.47396577851106203
   },
   "audit": {
     "done": true,
     "pass": true,
-    "detail": "独立复算覆盖面积=28805878 m² vs 引擎=28805878 m²，相对偏差=0.0000%（容差 ±1%），判定=PASS"
+    "detail": "独立复算覆盖面积=92163043 m² vs 引擎=92163043 m²，相对偏差=0.0000%（容差 ±1%），判定=PASS"
   },
   "consistency": {
     "done": true,
     "pass": true,
-    "detail": "gap_rate=99.8519% vs 100-coverage_rate=99.8519%，偏差=0.0000%（容差 ±1%）"
+    "detail": "gap_rate=99.5260% vs 100-coverage_rate=99.5260%，偏差=0.0000%（容差 ±1%）"
   },
   "all_pass": true
 }
