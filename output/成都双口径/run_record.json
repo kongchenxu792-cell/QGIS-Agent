@@ -1,0 +1,283 @@
+{
+  "task": "成都双口径跑通 + CEO 实测复现",
+  "date": "2026-08-31 13:55:46",
+  "data_dir": "D:\\桌面\\项目测试数据\\中国\\成都",
+  "out_dir": "D:\\桌面\\QGIS-Agent\\output\\成都双口径",
+  "radius_m": 500.0,
+  "calibers": {
+    "A": {
+      "desc": "37 点官方挂牌（scdata 应急厅）",
+      "path": "D:\\桌面\\项目测试数据\\中国\\成都\\避难所_3857_gpkg_37pt_backup.gpkg"
+    },
+    "B": {
+      "desc": "1284 点 = 37 官方 + 1247 OSM 潜在载体",
+      "path": "D:\\桌面\\项目测试数据\\中国\\成都\\避难所_3857.gpkg"
+    }
+  },
+  "results": [
+    {
+      "caliber": "A",
+      "count": 37,
+      "coverage_rate": 0.14402825786969753,
+      "covered_area": 28006415.36822754,
+      "total_area": 19445083751.248985,
+      "gap_rate": 99.85597174213031,
+      "pop_coverage_rate": 1.4079028531568003,
+      "covered_population": 263274.0689047056,
+      "total_population": 18699732.60686221,
+      "audit": {
+        "done": true,
+        "pass": true,
+        "detail": "独立复算覆盖面积=28006415 m² vs 引擎=28006415 m²，相对偏差=0.0000%（容差 ±1%），判定=PASS"
+      },
+      "consistency": {
+        "done": true,
+        "pass": true,
+        "detail": "gap_rate=99.8560% vs 100-coverage_rate=99.8560%，偏差=0.0000%（容差 ±1%）"
+      },
+      "missing": {
+        "name": {
+          "missing": 0,
+          "total": 37,
+          "rate": 0.0
+        },
+        "address": {
+          "missing": 0,
+          "total": 37,
+          "rate": 0.0
+        },
+        "area": {
+          "missing": 6,
+          "total": 37,
+          "rate": 16.22
+        }
+      },
+      "report": {
+        "success": true,
+        "report_path": "D:\\桌面\\QGIS-Agent\\user_data\\reports\\risk_report_20260831_135531_chengdu.md",
+        "warning": "「成都」危险区覆盖率仅为 0.14%，低于预警阈值 50.00%，建议核查避难所布点。",
+        "disaster_name": "成都",
+        "coverage_rate": 0.14402825786969753
+      },
+      "summary": {
+        "total": 3,
+        "success": 3,
+        "fail": 0,
+        "steps": [
+          {
+            "chain": "coverage",
+            "success": true,
+            "stats": {
+              "source_count": 37,
+              "radius_m": 500.0,
+              "total_area": 19445083751.248985,
+              "covered_area": 28006415.36822754,
+              "coverage_rate": 0.14402825786969753
+            },
+            "res": {
+              "status": "ok",
+              "action": null,
+              "message": "覆盖率分析完成，新增图层：避难所_3857_riskcoverage_500.0m（1 个要素，500.0m 缓冲区，覆盖率 0.1%）",
+              "info": ""
+            }
+          },
+          {
+            "chain": "gap",
+            "success": true,
+            "stats": {
+              "source_count": 37,
+              "radius_m": 500.0,
+              "total_area": 19445083751.248985,
+              "covered_area": 28006415.36822754,
+              "gap_area": 19417077335.880756,
+              "coverage_rate": 0.14402825786969753,
+              "gap_rate": 99.85597174213031
+            },
+            "res": {
+              "status": "ok",
+              "action": null,
+              "message": "盲区分析完成，新增图层：避难所_3857_gap_500.0m（1 个要素，500.0m 缓冲区，盲区率 99.9%，盲区面积 19417077336 m²）",
+              "info": ""
+            }
+          },
+          {
+            "chain": "population_coverage",
+            "success": true,
+            "stats": {
+              "source_count": 37,
+              "radius_m": 500.0,
+              "total_area": 19445083751.248985,
+              "covered_area": 28006415.36822837,
+              "coverage_rate": 0.14402825786970178,
+              "total_population": 18699732.60686221,
+              "covered_population": 263274.0689047056,
+              "pop_coverage_rate": 1.4079028531568003
+            },
+            "res": {
+              "status": "ok",
+              "action": null,
+              "message": "人口覆盖率分析完成，新增图层：避难所_3857_pop_coverage_500.0m（1 个要素，500.0m 缓冲区，面积覆盖率 0.1%，人口覆盖率 1.4%，总人口 18699733）",
+              "info": ""
+            }
+          }
+        ]
+      },
+      "all_pass": true
+    },
+    {
+      "caliber": "B",
+      "count": 1284,
+      "coverage_rate": 4.119669455280632,
+      "covered_area": 801073175.8539418,
+      "total_area": 19445083751.248985,
+      "gap_rate": 95.88033054471937,
+      "pop_coverage_rate": 27.274942077576274,
+      "covered_population": 5100341.237183312,
+      "total_population": 18699732.60686221,
+      "audit": {
+        "done": true,
+        "pass": true,
+        "detail": "独立复算覆盖面积=801073176 m² vs 引擎=801073176 m²，相对偏差=0.0000%（容差 ±1%），判定=PASS"
+      },
+      "consistency": {
+        "done": true,
+        "pass": true,
+        "detail": "gap_rate=95.8803% vs 100-coverage_rate=95.8803%，偏差=0.0000%（容差 ±1%）"
+      },
+      "missing": {
+        "name": {
+          "missing": 0,
+          "total": 1284,
+          "rate": 0.0
+        },
+        "address": {
+          "missing": 1247,
+          "total": 1284,
+          "rate": 97.12
+        },
+        "area": {
+          "missing": 1253,
+          "total": 1284,
+          "rate": 97.59
+        }
+      },
+      "report": {
+        "success": true,
+        "report_path": "D:\\桌面\\QGIS-Agent\\user_data\\reports\\risk_report_20260831_135537_chengdu.md",
+        "warning": "「成都」危险区覆盖率仅为 4.12%，低于预警阈值 50.00%，建议核查避难所布点。",
+        "disaster_name": "成都",
+        "coverage_rate": 4.119669455280632
+      },
+      "summary": {
+        "total": 3,
+        "success": 3,
+        "fail": 0,
+        "steps": [
+          {
+            "chain": "coverage",
+            "success": true,
+            "stats": {
+              "source_count": 1284,
+              "radius_m": 500.0,
+              "total_area": 19445083751.248985,
+              "covered_area": 801073175.8539418,
+              "coverage_rate": 4.119669455280632
+            },
+            "res": {
+              "status": "ok",
+              "action": null,
+              "message": "覆盖率分析完成，新增图层：避难所_3857_riskcoverage_500.0m（1 个要素，500.0m 缓冲区，覆盖率 4.1%）",
+              "info": ""
+            }
+          },
+          {
+            "chain": "gap",
+            "success": true,
+            "stats": {
+              "source_count": 1284,
+              "radius_m": 500.0,
+              "total_area": 19445083751.248985,
+              "covered_area": 801073175.8539418,
+              "gap_area": 18644010575.395042,
+              "coverage_rate": 4.119669455280632,
+              "gap_rate": 95.88033054471937
+            },
+            "res": {
+              "status": "ok",
+              "action": null,
+              "message": "盲区分析完成，新增图层：避难所_3857_gap_500.0m（1 个要素，500.0m 缓冲区，盲区率 95.9%，盲区面积 18644010575 m²）",
+              "info": ""
+            }
+          },
+          {
+            "chain": "population_coverage",
+            "success": true,
+            "stats": {
+              "source_count": 1284,
+              "radius_m": 500.0,
+              "total_area": 19445083751.248985,
+              "covered_area": 801073175.2601397,
+              "coverage_rate": 4.119669452226893,
+              "total_population": 18699732.60686221,
+              "covered_population": 5100341.237183312,
+              "pop_coverage_rate": 27.274942077576274
+            },
+            "res": {
+              "status": "ok",
+              "action": null,
+              "message": "人口覆盖率分析完成，新增图层：避难所_3857_pop_coverage_500.0m（1 个要素，500.0m 缓冲区，面积覆盖率 4.1%，人口覆盖率 27.3%，总人口 18699733）",
+              "info": ""
+            }
+          }
+        ]
+      },
+      "all_pass": true
+    }
+  ],
+  "ceo_repro": {
+    "text": "计算避难所500米范围内的人口覆盖率",
+    "scenario_ok": {
+      "name": "1_正确识别",
+      "success": true,
+      "action": "population_coverage",
+      "status": "ok",
+      "message": "人口覆盖率分析完成，新增图层：避难所_3857_pop_coverage_500.0m（1 个要素，500.0m 缓冲区，面积覆盖率 4.1%，人口覆盖率 27.3%，总人口 18699733）",
+      "stats_keys": [
+        "coverage_rate",
+        "covered_area",
+        "covered_population",
+        "pop_coverage_rate",
+        "radius_m",
+        "source_count",
+        "total_area",
+        "total_population"
+      ],
+      "pop_coverage_rate": 27.274942077576274,
+      "covered_population": 5100341.237183312,
+      "total_population": 18699732.60686221
+    },
+    "scenario_correct": {
+      "name": "2_纠偏实证",
+      "success": true,
+      "action": "population_coverage",
+      "status": "ok",
+      "message": "人口覆盖率分析完成，新增图层：避难所_3857_pop_coverage_500.0m（1 个要素，500.0m 缓冲区，面积覆盖率 4.1%，人口覆盖率 27.3%，总人口 18699733）",
+      "stats_keys": [
+        "coverage_rate",
+        "covered_area",
+        "covered_population",
+        "pop_coverage_rate",
+        "radius_m",
+        "source_count",
+        "total_area",
+        "total_population"
+      ],
+      "pop_coverage_rate": 27.274942077576274,
+      "covered_population": 5100341.237183312,
+      "total_population": 18699732.60686221
+    }
+  },
+  "engine_change": "none",
+  "registry_change": "none",
+  "all_pass": true
+}
