@@ -266,6 +266,11 @@ class PipelineExecutor:
                     f"{r.condition}: {r.message}" for r in report.blocking_failed
                 )
             message = f"Guard check failed: {detail}" if detail else "Guard check failed"
+            # B 兜底：几何角色 Guard 失败时，追加「应为什么几何图层 + 当前候选」，
+            # 使用户/后续澄清可直接修正（只增强报错文案，不改 Guard 判定）
+            role_hint = self._build_guard_role_hint(report)
+            if role_hint:
+                message = f"{message} | {role_hint}"
             return {"success": False, "status": "failed", "message": message}
 
         # step_outputs: {step_id → resolved output, "$source_layer" → layer, ...}
@@ -646,6 +651,37 @@ class PipelineExecutor:
         if report.blocking_failed:
             return False
         return True
+
+    def _build_guard_role_hint(self, report) -> str:
+        """B 兜底：几何角色 Guard 失败时，列出「应为什么几何图层 + 当前可用候选」。
+
+        只增强 Guard 失败报错文案，便于用户/后续澄清直接修正；
+        不改 Guard 判定（Guard 仍为最后防线，纠偏在参数修正层）。
+        """
+        if report is None or not report.blocking_failed:
+            return ""
+        try:
+            from core.clarification import role_candidates, ROLE_LABELS
+        except ImportError:
+            return ""
+        geom_guards = {
+            "source_is_point": ("source_layer", "Point"),
+            "boundary_is_polygon": ("boundary_layer", "Polygon"),
+            "population_is_polygon": ("population_layer", "Polygon"),
+            "intensity_is_polygon": ("intensity_layer", "Polygon"),
+        }
+        parts = []
+        for r in report.blocking_failed:
+            if r.condition not in geom_guards:
+                continue
+            param_key, expected = geom_guards[r.condition]
+            label = ROLE_LABELS.get(param_key, {}).get("zh", param_key)
+            cands = role_candidates(self.project, param_key)
+            if cands:
+                parts.append(f"{label}应为{expected}图层（当前候选：{'、'.join(cands)}）")
+            else:
+                parts.append(f"{label}应为{expected}图层（当前无可用候选）")
+        return " | ".join(parts)
 
     # ── Step 执行 ────────────────────────────────────────────────
 

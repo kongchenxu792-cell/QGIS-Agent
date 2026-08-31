@@ -45,6 +45,23 @@ _LAYER_PARAM_KEYS = [
 # 字段类参数键（占位符应清空后交由字段自动探测，而非按图层名匹配）
 _FIELD_PARAM_KEYS = {"population_field", "intensity_field"}
 
+# 几何类型纠偏：角色 → 期望几何类型（与 clarification.ROLE_GEOMETRY / Guard 语义一致）
+# QGIS 3.x 稳定值：PointGeometry=0、PolygonGeometry=2
+_GEOM_ROLE_EXPECT = {
+    "source_layer": 0,        # Point
+    "boundary_layer": 2,      # Polygon
+    "population_layer": 2,    # Polygon
+    "intensity_layer": 2,     # Polygon
+}
+
+# 几何类型纠偏：角色 → 图层名关键词（多候选时确定性优先匹配，如 避难所→点源、行政区/边界→面边界）
+_GEOM_ROLE_HINTS = {
+    "source_layer": ["避难所", "shelter", "point", "点"],
+    "boundary_layer": ["行政区", "边界", "boundary", "admin", "区", "市"],
+    "population_layer": ["人口", "pop", "population"],
+    "intensity_layer": ["震度", "intensity", "jma", "seismic"],
+}
+
 # 占位文案模式：小模型常照抄 system prompt 示例中的占位符
 _PLACEHOLDER_PATTERNS = [
     r"图层名", r"字段名", r"图层\d+", r"字段\d+",
@@ -107,6 +124,80 @@ def _auto_detect_field_params(project, params: Dict[str, Any]) -> None:
                         break
 
 
+def _correct_layer_geometry_roles(project, params: Dict[str, Any]) -> Dict[str, Any]:
+    """几何类型纠偏：LLM 填了存在但几何类型与角色期望不符的图层时，按几何类型重新分配。
+
+    角色→几何映射（与 clarification.ROLE_GEOMETRY / Guard 语义一致）：
+        source_layer→Point、boundary_layer→Polygon、population_layer→Polygon、intensity_layer→Polygon
+
+    纠偏规则（确定性，不依赖 LLM 再猜）：
+        1. 候选 = role_candidates(project, key)（几何正确候选，保持项目图层顺序）
+        2. 优先关键词精确匹配（避难所→点源、行政区/边界→面边界）：命中唯一 → 替换
+        3. 再按几何类型兜底：候选恰 1 个 → 替换
+        4. 多候选仍歧义 → 清空参数，交由 P2-4 运行前澄清（不静默选）
+        5. 无候选 → 保持原值，由 Guard 最后防线失败提示兜底（B 兜底，不动 Guard 判定）
+
+    仅处理图层名真实存在于项目的值（不存在的值已由名称校验清空）。
+    返回就地修改后的 params（与 _correct_layer_params 一致）。
+    """
+    if not project:
+        return params
+    try:
+        from core.clarification import role_candidates
+    except ImportError:
+        return params
+
+    for key, expected_geom in _GEOM_ROLE_EXPECT.items():
+        val = params.get(key, "")
+        if not val:
+            continue
+        layer = _find_layer_by_name(project, val)
+        if layer is None:
+            continue
+        geom_fn = getattr(layer, "geometryType", None)
+        if geom_fn is None:
+            continue
+        try:
+            actual_geom = geom_fn()
+        except Exception:
+            continue
+        if actual_geom == expected_geom:
+            continue  # 几何正确，无需纠偏
+
+        _log.warning(
+            "几何纠偏：%s=%s 几何类型=%s 与角色期望=%s 不符，按几何类型重新分配",
+            key, val, actual_geom, expected_geom,
+        )
+        cands = role_candidates(project, key)
+        if not cands:
+            _log.warning("几何纠偏：%s 无几何正确候选，保持原值交 Guard 兜底提示", key)
+            continue
+
+        # 1) 关键词精确匹配（排除当前错误值本身）
+        hints = _GEOM_ROLE_HINTS.get(key, [])
+        hint_matched = [
+            c for c in cands if c != val and any(h.lower() in c.lower() for h in hints)
+        ]
+        if len(hint_matched) == 1:
+            params[key] = hint_matched[0]
+            _log.info("几何纠偏：%s %s → %s（关键词命中）", key, val, hint_matched[0])
+            continue
+
+        # 2) 几何类型兜底：候选唯一
+        if len(cands) == 1:
+            params[key] = cands[0]
+            _log.info("几何纠偏：%s %s → %s（几何候选唯一）", key, val, cands[0])
+            continue
+
+        # 3) 多候选仍歧义 → 清空参数走 P2-4 澄清（不静默选）
+        params[key] = ""
+        _log.info(
+            "几何纠偏：%s %s 存在多个几何候选 %s，清空交由运行前澄清",
+            key, val, cands,
+        )
+    return params
+
+
 def _correct_layer_params(project, params: Dict[str, Any], user_text: str) -> Dict[str, Any]:
     """校验并修正 LLM 输出的图层参数。
 
@@ -145,6 +236,9 @@ def _correct_layer_params(project, params: Dict[str, Any], user_text: str) -> Di
 
     if need_correction:
         params = auto_detect_layers_from_text(user_text, params, project)
+
+    # 几何类型纠偏：LLM 填了存在但几何类型与角色期望不符的图层 → 按几何类型重新分配
+    params = _correct_layer_geometry_roles(project, params)
 
     # 字段参数自动探测（占位符清空后触发）
     _auto_detect_field_params(project, params)
