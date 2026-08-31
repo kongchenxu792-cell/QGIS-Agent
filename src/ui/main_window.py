@@ -369,6 +369,117 @@ class LayerTreeMenuProvider(QgsLayerTreeViewMenuProvider):
             self._on_rename(layer, new_name.strip())
 
 
+def _md_to_html(md_text: str) -> str:
+    """轻量 Markdown → HTML 转换（仅覆盖风险评估报告所需子集，零新依赖）。
+
+    支持：#/##/### 标题、- 无序列表、| 表格、> 引用（预警块）、**加粗**、`行内代码`。
+    预警块（> ⚠️ ...）渲染为醒目高亮样式；样式使用内联 style，兼容 Qt 富文本子集。
+    """
+    import html as _html
+
+    def esc(s: str) -> str:
+        return _html.escape(s, quote=False)
+
+    def inline(s: str) -> str:
+        s = esc(s)
+        s = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", s)
+        s = re.sub(r"`([^`]+)`", r"<code>\1</code>", s)
+        return s
+
+    lines = md_text.splitlines()
+    out: list[str] = []
+    para: list[str] = []
+    in_list = False
+    in_table = False
+
+    def flush_para() -> None:
+        nonlocal para
+        if para:
+            out.append("<p>" + "<br/>".join(inline(x) for x in para) + "</p>")
+            para = []
+
+    def flush_list() -> None:
+        nonlocal in_list
+        if in_list:
+            out.append("</ul>")
+            in_list = False
+
+    def flush_table() -> None:
+        nonlocal in_table
+        if in_table:
+            out.append("</table>")
+            in_table = False
+
+    i = 0
+    while i < len(lines):
+        line = lines[i].rstrip()
+        stripped = line.strip()
+
+        m = re.match(r"^(#{1,3})\s+(.*)$", stripped)
+        if m:
+            flush_para(); flush_list(); flush_table()
+            level = len(m.group(1))
+            color = "#1f4e79" if level <= 2 else "#444444"
+            out.append(f'<h{level}><span style="color:{color};">{inline(m.group(2))}</span></h{level}>')
+            i += 1
+            continue
+
+        if stripped.startswith("|") and stripped.endswith("|"):
+            cells = [c.strip() for c in stripped.strip("|").split("|")]
+            if not in_table:
+                flush_para(); flush_list()
+                out.append('<table border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse;">')
+                in_table = True
+            if all(re.fullmatch(r":?-{3,}:?", c) for c in cells if c):
+                i += 1
+                continue
+            tag = "th" if out[-1].startswith("<table") else "td"
+            style = ' style="background-color:#eef3fb; color:#1f4e79;"' if tag == "th" else ""
+            out.append("<tr>" + "".join(f"<{tag}{style}>{inline(c)}</{tag}>" for c in cells) + "</tr>")
+            i += 1
+            continue
+        if in_table:
+            flush_table()
+
+        if stripped.startswith(">"):
+            flush_para(); flush_list(); flush_table()
+            quote = stripped.lstrip(">").strip()
+            out.append(
+                '<div style="background-color:#fdecea; color:#c0392b; font-weight:bold; '
+                f'padding:8px 12px; margin:8px 0; border:1px solid #e74c3c;">⚠️ {inline(quote)}</div>'
+            )
+            i += 1
+            continue
+
+        m = re.match(r"^[-*]\s+(.*)$", stripped)
+        if m:
+            flush_para(); flush_table()
+            if not in_list:
+                out.append("<ul>")
+                in_list = True
+            out.append(f"<li>{inline(m.group(1))}</li>")
+            i += 1
+            continue
+        if in_list:
+            flush_list()
+
+        if not stripped:
+            flush_para(); flush_list(); flush_table()
+            i += 1
+            continue
+
+        para.append(stripped)
+        i += 1
+
+    flush_para(); flush_list(); flush_table()
+    return (
+        '<html><head><meta charset="utf-8"/></head><body '
+        'style="font-family:\'Microsoft YaHei\',sans-serif; font-size:13px; color:#222222;">'
+        + "\n".join(out)
+        + "</body></html>"
+    )
+
+
 class MainWindow(QMainWindow):
     """桌面 GIS MVP 应用程序的主窗口类。
 
@@ -444,6 +555,8 @@ class MainWindow(QMainWindow):
         self.ai_response_display = QTextEdit(self)
         self.ai_response_display.setAccessibleName("ai_response_display")
         self.ai_response_display.setReadOnly(True)
+        # 报告渲染开关：False=HTML 渲染，True=纯文本（默认 HTML）
+        self._report_plain_mode = False
 
         # 项目管理器
         self.project_manager = ProjectManager()
@@ -2826,7 +2939,17 @@ class MainWindow(QMainWindow):
 
             report_msg = self._lm.tr("report_generated", path=gen["report_path"])
             self.statusBar().showMessage(report_msg, 8000)
-            self.ai_response_display.append(f"\n📄 {report_msg}")
+            # 片B渲染：默认将 Markdown 报告渲染为 HTML 展示；纯文本模式或读取失败时回退 append
+            if not self._report_plain_mode:
+                try:
+                    with open(gen["report_path"], "r", encoding="utf-8") as _rf:
+                        md_content = _rf.read()
+                    self.ai_response_display.setHtml(_md_to_html(md_content))
+                except Exception as _rexc:  # 渲染失败不影响主流程，回退纯文本
+                    _log.warning("片B 报告 HTML 渲染失败，回退纯文本: %s", _rexc)
+                    self.ai_response_display.append(f"\n📄 {report_msg}")
+            else:
+                self.ai_response_display.append(f"\n📄 {report_msg}")
             if gen.get("warning"):
                 QMessageBox.warning(
                     self,
@@ -2835,6 +2958,10 @@ class MainWindow(QMainWindow):
                 )
         except Exception as exc:  # 报告生成失败不影响主流程
             _log.warning("片B 风险评估报告生成失败: %s", exc)
+
+    def set_report_plain_mode(self, enabled: bool) -> None:
+        """切换报告结果区渲染模式：False=HTML 渲染，True=纯文本。"""
+        self._report_plain_mode = bool(enabled)
 
     def _handle_ai_response(self, response_text: str) -> None:
         """解析 AI JSON 路由指令（旧版兼容，单对象格式）。"""
