@@ -1,0 +1,30 @@
+{
+  "task": "成都真实洪涝场景（河流 buffer 近似淹没区）",
+  "date": "2026-08-31 19:35:54",
+  "data_dir": "D:\\桌面\\项目测试数据\\中国\\成都",
+  "river_path": "D:\\桌面\\项目测试数据\\中国\\成都\\河流_3857.gpkg",
+  "inundation_path": "D:\\桌面\\QGIS-Agent\\output\\成都洪涝\\淹没区_3857.gpkg",
+  "inundation_source": "河流buffer近似(300m)",
+  "inundation_area_m2": 6180759064.503275,
+  "shelter_path": "D:\\桌面\\项目测试数据\\中国\\成都\\避难所_3857_gpkg_37pt_backup.gpkg",
+  "radius_m": 500.0,
+  "coverage_rate": 0.14650767602719156,
+  "covered_area": 9055286.466243789,
+  "total_area": 6180759064.503312,
+  "audit": {
+    "done": true,
+    "pass": true,
+    "detail": "独立复算覆盖面积=9055286 m² vs 引擎=9055286 m²，相对偏差=0.0000%（容差 ±1%），判定=PASS"
+  },
+  "report": {
+    "success": true,
+    "report_path": "D:\\桌面\\QGIS-Agent\\user_data\\reports\\risk_report_20260831_193554_chengdu.md",
+    "warning": "「成都」危险区覆盖率仅为 0.15%，低于预警阈值 50.00%，建议核查避难所布点。",
+    "disaster_name": "成都",
+    "coverage_rate": 0.14650767602719156
+  },
+  "zero_coverage": false,
+  "engine_change": "none",
+  "registry_change": "none",
+  "all_pass": true
+}
