@@ -138,21 +138,24 @@ AIGC:
 - **一键风险评估报告**（`src/core/report_generator.py`）：评估完成后自动生成 `user_data/reports/risk_report_*.md`，并触发**阈值预警**（如覆盖率低于预警阈值 50% 时给出布点核查建议）。
 - **run 记录**（`src/core/run_queue.py` + `output/.../run_record.json`）：每次运行自动留痕，记录数据源、链路参数、统计结果、报告路径与审计结论，全程可追溯。
 
-### 中国真实数据验证（成都）
+### 中国真实数据验证（成都，双口径）
 
-用中国真实数据（成都：避难所 39 点 / 行政区 / 人口格网 19365，EPSG:3857，半径 500m）跑通三链，全部 PASS 并触发预警。
+用中国真实数据（成都：行政区 / 人口格网 19365，EPSG:3857，半径 500m）跑通三链，全部 PASS 并触发预警。采用双口径验证：
+- 口径 A：37 点官方挂牌避难所（scdata 应急厅，最高可信度）
+- 口径 B：1284 点（37 官方 + 1247 OSM 学校/公园/运动场潜在载体）
 
-| 链路 | 指标 | 结果 | 状态 |
+| 指标 | 口径 A（37 点官方） | 口径 B（1284 点含潜在载体） | 状态 |
 |------|------|------|------|
-| coverage | 覆盖率 | 0.148% | 成功 |
-| gap | 盲区率 | 99.85% | 成功 |
-| population_coverage | 人口覆盖率 | 2.53% | 成功 |
+| 覆盖率 | 0.144% | 4.12% | 成功 |
+| 盲区率 | 99.86% | 95.88% | 成功 |
+| 人口覆盖率 | 1.41% | 27.27% | 成功 |
 
-- 独立复算覆盖面积 vs 引擎：相对偏差 **0.0000%**（容差 ±1%）→ PASS
-- 一致性校验（gap_rate vs 100-coverage_rate）：偏差 **0.0000%** → PASS
-- 预警：「成都」危险区覆盖率仅为 0.15%，低于预警阈值 50.00%，建议核查避难所布点
+- 独立复算覆盖面积 vs 引擎：两口径相对偏差均 **0.0000%**（容差 ±1%）→ PASS
+- 一致性校验（gap_rate vs 100-coverage_rate）：两口径偏差均 **0.0000%** → PASS
+- 预警：口径 A「成都」危险区覆盖率仅为 0.14%，口径 B 为 4.12%，均低于预警阈值 50.00%，建议核查避难所布点
+- 双口径意义：口径 A（挂牌 0.14%）展示可信下限（官方挂牌数据，置信度最高）；口径 B（含潜在载体 4.12%）展示容量评估视角（学校/公园/运动场等潜在避难场所，依据国家标准）
 - 注册表新增 `chengdu` 条目，现有 4 灾种零改动；引擎 / Guards / 模板 / CRS 零改动
-- 跑通脚本：`scripts/run_chengdu.py`；结果表：`output/成都正式跑通/results_table.md`；运行记录：`output/成都正式跑通/run_record.json`
+- 跑通脚本：`scripts/run_chengdu_dual.py`；双口径对照表：`output/成都双口径/双口径对照表.md`；运行记录：`output/成都双口径/run_record.json`；CEO 实测复现（真实 UI）：[ceo_ui_final_20260831_170141.png](output/成都双口径/CEO_UI复现/ceo_ui_final_20260831_170141.png)
 
 > 更多落地证据见 [docs/e2e_acceptance_plan.md](docs/e2e_acceptance_plan.md) 验收计划与 [output/落地证明包](output/落地证明包) 证明包。
 
@@ -232,7 +235,8 @@ QGIS-Agent/
 │   ├── i18n/                   # 中/日/英三语（各 219 键）
 │   └── ui/                     # PyQt5 界面层
 ├── scripts/
-│   ├── run_chengdu.py          # 成都三链跑通脚本
+│   ├── run_chengdu.py          # 成都三链跑通脚本（早期 39 点）
+│   ├── run_chengdu_dual.py     # 成都双口径跑通脚本（37 官方 / 1284 含潜在载体）
 │   ├── multi_disaster_llm.py   # 多灾种 LLM 全链验证
 │   ├── proof_of_run.py         # 运行留痕证明
 │   └── ...
@@ -241,7 +245,7 @@ QGIS-Agent/
 │   ├── e2e_acceptance_plan.md  # 端到端验收计划
 │   └── ...
 └── output/
-    ├── 成都正式跑通/           # 成都三链结果表 + run_record.json
+    ├── 成都双口径/             # 双口径对照表 + run_record.json + CEO 复现证据
     ├── 片A补充_LLM全链验证/
     ├── 落地证明包/             # 落地证明包
     └── ...
@@ -280,7 +284,7 @@ tests\run_tests.bat -v
 
 - **端到端验收计划**：[docs/e2e_acceptance_plan.md](docs/e2e_acceptance_plan.md)
 - **落地证明包**：[output/落地证明包](output/落地证明包)
-- **中国真实数据验证**：[output/成都正式跑通/results_table.md](output/成都正式跑通/results_table.md)
+- **中国真实数据验证（成都双口径）**：[output/成都双口径/双口径对照表.md](output/成都双口径/双口径对照表.md)
 
 ---
 
