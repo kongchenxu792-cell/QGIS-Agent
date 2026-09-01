@@ -1755,7 +1755,8 @@ class MainWindow(QMainWindow):
         self.ai_response_display.setObjectName("aiResponseDisplay")
         self.ai_response_display.setPlaceholderText("AI 响应将显示在此处...")
         self.ai_response_display.setToolTip("AI 返回的原始响应内容")
-        self.ai_response_display.setFixedHeight(120)
+        # 结果区高度：CEO 反馈需要更大可视区域，由 120 适度扩至 200（向下扩展，避免过度挤压画布）
+        self.ai_response_display.setFixedHeight(200)
         main_layout.addWidget(self.ai_response_display)
         return container
 
