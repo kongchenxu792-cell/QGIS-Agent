@@ -343,4 +343,3 @@ tests\run_tests.bat -v
 - **作者**：kongchenxu792
 - **邮箱**：kongchenxu792@gmail.com
 - **仓库**：[github.com/kongchenxu792-cell/QGIS-Agent](https://github.com/kongchenxu792-cell/QGIS-Agent)
-*（内容由AI生成，仅供参考）*
